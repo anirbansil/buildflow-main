@@ -1,0 +1,449 @@
+{
+  "info": {
+    "_postman_id": "b7f3a2d0-1a4e-4c8a-9d2f-buildflow0001",
+    "name": "BuildFlow API",
+    "description": "BuildFlow /api/v1 endpoints. Run requests top to bottom inside a folder — several requests auto-fill the collection variables (token, project_id, task_id, supervisor_id) used by the ones after them, via each request's Tests tab script.\n\nStart order: Auth > Login, then Projects > List Assigned Projects, then anything in Tasks.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      { "key": "token", "value": "{{token}}", "type": "string" }
+    ]
+  },
+  "variable": [
+    { "key": "base_url", "value": "http://127.0.0.1:8000/api/v1", "type": "string" },
+    { "key": "token", "value": "", "type": "string" },
+    { "key": "project_id", "value": "", "type": "string" },
+    { "key": "task_id", "value": "", "type": "string" },
+    { "key": "supervisor_id", "value": "", "type": "string" },
+    { "key": "user_id", "value": "", "type": "string" },
+    { "key": "image_id", "value": "", "type": "string" }
+  ],
+  "item": [
+    {
+      "name": "Auth",
+      "item": [
+        {
+          "name": "Register",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"first_name\": \"Jane\",\n  \"last_name\": \"Doe\",\n  \"email\": \"jane.doe@example.com\",\n  \"password\": \"password123\",\n  \"password_confirmation\": \"password123\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{base_url}}/register",
+              "host": ["{{base_url}}"],
+              "path": ["register"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "    const json = pm.response.json();",
+                  "    if (json.token) { pm.collectionVariables.set('token', json.token); }",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Login",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"demo@yopmail.com\",\n  \"password\": \"your-password-here\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{base_url}}/login",
+              "host": ["{{base_url}}"],
+              "path": ["login"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "    const json = pm.response.json();",
+                  "    if (json.token) { pm.collectionVariables.set('token', json.token); }",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get Authenticated User (me)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/me",
+              "host": ["{{base_url}}"],
+              "path": ["me"]
+            }
+          }
+        },
+        {
+          "name": "Update Profile",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"first_name\": \"Jane\",\n  \"phone\": \"01712345678\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{base_url}}/profile/update",
+              "host": ["{{base_url}}"],
+              "path": ["profile", "update"]
+            }
+          }
+        },
+        {
+          "name": "Logout",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/logout",
+              "host": ["{{base_url}}"],
+              "path": ["logout"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Users",
+      "item": [
+        {
+          "name": "List Users",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/users?role=SUPERVISOR&per_page=10",
+              "host": ["{{base_url}}"],
+              "path": ["users"],
+              "query": [
+                { "key": "name", "value": "", "disabled": true },
+                { "key": "role", "value": "SUPERVISOR" },
+                { "key": "per_page", "value": "10" }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "    const json = pm.response.json();",
+                  "    if (json.data && json.data.length) { pm.collectionVariables.set('supervisor_id', json.data[0].id); pm.collectionVariables.set('user_id', json.data[0].id); }",
+                  "}"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Projects",
+      "item": [
+        {
+          "name": "List Assigned Projects",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/projects?per_page=10",
+              "host": ["{{base_url}}"],
+              "path": ["projects"],
+              "query": [
+                { "key": "search", "value": "", "disabled": true },
+                { "key": "per_page", "value": "10" }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "    const json = pm.response.json();",
+                  "    if (json.data && json.data.length) { pm.collectionVariables.set('project_id', json.data[0].id); }",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "View Project Detail",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/projects/{{project_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["projects", "{{project_id}}"]
+            }
+          }
+        },
+        {
+          "name": "Create Project",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Riverside Complex\",\n  \"description\": \"Residential development project.\",\n  \"location\": \"Dhaka\",\n  \"lat\": 23.8103,\n  \"long\": 90.4125,\n  \"total_budget\": 3000000,\n  \"deadline\": \"2030-06-30\",\n  \"status\": 1,\n  \"assigned_users\": []\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{base_url}}/projects",
+              "host": ["{{base_url}}"],
+              "path": ["projects"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "    const json = pm.response.json();",
+                  "    if (json.data && json.data.id) { pm.collectionVariables.set('project_id', json.data.id); }",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Create Project (with file uploads)",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                { "key": "name", "value": "Riverside Complex", "type": "text" },
+                { "key": "description", "value": "Residential development project.", "type": "text" },
+                { "key": "location", "value": "Dhaka", "type": "text" },
+                { "key": "total_budget", "value": "3000000", "type": "text" },
+                { "key": "deadline", "value": "2030-06-30", "type": "text" },
+                { "key": "status", "value": "1", "type": "text" },
+                { "key": "images[]", "type": "file", "src": [] },
+                { "key": "image_names[]", "value": "Site Plan", "type": "text" }
+              ]
+            },
+            "url": {
+              "raw": "{{base_url}}/projects",
+              "host": ["{{base_url}}"],
+              "path": ["projects"]
+            }
+          }
+        },
+        {
+          "name": "Update Project",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"total_budget\": 4000000,\n  \"deadline\": \"2031-01-01\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{base_url}}/projects/{{project_id}}/update",
+              "host": ["{{base_url}}"],
+              "path": ["projects", "{{project_id}}", "update"]
+            }
+          }
+        },
+        {
+          "name": "Assign Users to Project",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"user_ids\": [\"{{user_id}}\"]\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{base_url}}/projects/{{project_id}}/assign",
+              "host": ["{{base_url}}"],
+              "path": ["projects", "{{project_id}}", "assign"]
+            }
+          }
+        },
+        {
+          "name": "Toggle Project Status",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/projects/{{project_id}}/toggle-status",
+              "host": ["{{base_url}}"],
+              "path": ["projects", "{{project_id}}", "toggle-status"]
+            }
+          }
+        },
+        {
+          "name": "Delete Project Document",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/projects/{{project_id}}/images/{{image_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["projects", "{{project_id}}", "images", "{{image_id}}"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Tasks",
+      "item": [
+        {
+          "name": "Create Task",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Site Foundation Phase - Sector B\",\n  \"description\": \"Oversee excavation and pouring for Sector B.\",\n  \"is_critical_path\": true,\n  \"deadline\": \"2026-10-24\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{base_url}}/projects/{{project_id}}/tasks",
+              "host": ["{{base_url}}"],
+              "path": ["projects", "{{project_id}}", "tasks"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "    const json = pm.response.json();",
+                  "    if (json.data && json.data.id) { pm.collectionVariables.set('task_id', json.data.id); }",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "List Tasks for Project",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/projects/{{project_id}}/tasks?per_page=10",
+              "host": ["{{base_url}}"],
+              "path": ["projects", "{{project_id}}", "tasks"],
+              "query": [{ "key": "per_page", "value": "10" }]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "    const json = pm.response.json();",
+                  "    if (json.data && json.data.length) { pm.collectionVariables.set('task_id', json.data[0].id); }",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "View Task Detail",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/tasks/{{task_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["tasks", "{{task_id}}"]
+            }
+          }
+        },
+        {
+          "name": "List Available Supervisors",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/tasks/{{task_id}}/available-supervisors?per_page=10",
+              "host": ["{{base_url}}"],
+              "path": ["tasks", "{{task_id}}", "available-supervisors"],
+              "query": [{ "key": "per_page", "value": "10" }]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "    const json = pm.response.json();",
+                  "    if (json.data && json.data.length) { pm.collectionVariables.set('supervisor_id', json.data[0].id); }",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Assign Supervisor to Task",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"supervisor_id\": {{supervisor_id}}\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{base_url}}/tasks/{{task_id}}/assign-supervisor",
+              "host": ["{{base_url}}"],
+              "path": ["tasks", "{{task_id}}", "assign-supervisor"]
+            }
+          }
+        }
+      ]
+    }
+  ]
+}
