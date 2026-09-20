@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Models\ActivityLog;
 use App\Models\Project;
 use App\Models\ProjectImage;
 use Illuminate\Http\JsonResponse;
@@ -19,11 +20,22 @@ class ProjectController extends Controller
      */
     public function index(Request $request): JsonResponse
     {
+        $request->validate([
+            'phase'    => 'nullable|string|in:' . implode(',', array_keys(Project::PHASES)),
+            'category' => 'nullable|string|in:' . implode(',', Project::CATEGORIES),
+        ]);
+
         $query = $request->user()
             ->projects()
             ->where('status', 1)
             ->when($request->filled('search'), fn ($q) =>
                 $q->where('name', 'like', '%' . trim($request->search) . '%')
+            )
+            ->when($request->filled('phase'), fn ($q) =>
+                $q->where('projects.phase', Project::PHASES[$request->phase])
+            )
+            ->when($request->filled('category'), fn ($q) =>
+                $q->where('projects.category', $request->category)
             )
             ->orderBy('deadline', 'asc')
             ->orderBy('id', 'desc');
@@ -83,8 +95,15 @@ class ProjectController extends Controller
             'lat'              => 'nullable|numeric|between:-90,90',
             'long'             => 'nullable|numeric|between:-180,180',
             'total_budget'     => 'nullable|numeric|min:0',
+            'used_budget'      => 'nullable|numeric|min:0',
             'deadline'         => 'nullable|date',
             'status'           => 'sometimes|in:1,2',
+            'phase'            => 'nullable|string|in:' . implode(',', array_keys(Project::PHASES)),
+            'category'         => 'nullable|string|in:' . implode(',', Project::CATEGORIES),
+            'progress'         => 'nullable|integer|between:0,100',
+            'general_contractor' => 'nullable|string|max:255',
+            'lead_architect'   => 'nullable|string|max:255',
+            'site_info'        => 'nullable|string',
             'assigned_users'   => 'nullable|array',
             'assigned_users.*' => 'integer|exists:users,id',
             'images'           => 'nullable|array',
@@ -101,8 +120,15 @@ class ProjectController extends Controller
                 'lat'          => $request->lat,
                 'long'         => $request->long,
                 'total_budget' => $request->total_budget,
+                'used_budget'  => $request->input('used_budget', 0),
                 'deadline'     => $request->deadline,
                 'status'       => $request->input('status', 1),
+                'phase'        => Project::PHASES[$request->input('phase', 'planning')],
+                'category'     => $request->category,
+                'progress'     => $request->input('progress', 0),
+                'general_contractor' => $request->general_contractor,
+                'lead_architect'     => $request->lead_architect,
+                'site_info'          => $request->site_info,
             ]);
 
             if ($request->filled('assigned_users')) {
@@ -148,8 +174,15 @@ class ProjectController extends Controller
             'lat'              => 'nullable|numeric|between:-90,90',
             'long'             => 'nullable|numeric|between:-180,180',
             'total_budget'     => 'nullable|numeric|min:0',
+            'used_budget'      => 'nullable|numeric|min:0',
             'deadline'         => 'nullable|date',
             'status'           => 'sometimes|in:1,2',
+            'phase'            => 'nullable|string|in:' . implode(',', array_keys(Project::PHASES)),
+            'category'         => 'nullable|string|in:' . implode(',', Project::CATEGORIES),
+            'progress'         => 'nullable|integer|between:0,100',
+            'general_contractor' => 'nullable|string|max:255',
+            'lead_architect'   => 'nullable|string|max:255',
+            'site_info'        => 'nullable|string',
             'assigned_users'   => 'nullable|array',
             'assigned_users.*' => 'integer|exists:users,id',
             'images'           => 'nullable|array',
@@ -169,9 +202,24 @@ class ProjectController extends Controller
                 'lat'          => $request->input('lat',          $project->lat),
                 'long'         => $request->input('long',         $project->long),
                 'total_budget' => $request->input('total_budget', $project->total_budget),
+                'used_budget'  => $request->input('used_budget',  $project->used_budget),
                 'deadline'     => $request->input('deadline',     $project->deadline?->format('Y-m-d')),
                 'status'       => $request->input('status',       $project->status),
+                'phase'        => $request->filled('phase') ? Project::PHASES[$request->phase] : $project->phase,
+                'category'     => $request->input('category',     $project->category),
+                'progress'     => $request->input('progress',     $project->progress),
+                'general_contractor' => $request->input('general_contractor', $project->general_contractor),
+                'lead_architect'     => $request->input('lead_architect',     $project->lead_architect),
+                'site_info'          => $request->input('site_info',          $project->site_info),
             ], fn ($v) => $v !== null));
+
+            if ($project->wasChanged('phase')) {
+                ActivityLog::record($project->id, 'project_phase_changed', 'Project phase changed to ' . Project::PHASE_LABELS[$project->phase], $request->user()->id);
+            }
+
+            if ($project->wasChanged('progress')) {
+                ActivityLog::record($project->id, 'project_progress_updated', 'Project progress updated to ' . $project->progress . '%', $request->user()->id);
+            }
 
             // Sync assigned users if provided
             if ($request->has('assigned_users')) {
@@ -333,31 +381,66 @@ class ProjectController extends Controller
     private function listResource(Project $project): array
     {
         return [
-            'id'           => $project->id,
-            'name'         => $project->name,
-            'location'     => $project->location,
-            'total_budget' => $project->total_budget,
-            'deadline'     => $project->deadline?->format('Y-m-d'),
-            'status'       => $project->status,
-            'status_label' => $project->status === 1 ? 'Active' : 'Inactive',
+            'id'            => $project->id,
+            'project_code'  => $project->project_code,
+            'name'          => $project->name,
+            'location'      => $project->location,
+            'category'      => $project->category,
+            'total_budget'  => $project->total_budget,
+            'used_budget'   => $project->used_budget,
+            'progress'      => $project->progress,
+            'assigned_date' => $this->assignedDate($project),
+            'deadline'      => $project->deadline?->format('Y-m-d'),
+            'phase'         => array_search($project->phase, Project::PHASES, true) ?: null,
+            'phase_label'   => Project::PHASE_LABELS[$project->phase] ?? null,
+            'status'        => $project->status,
+            'status_label'  => $project->status === 1 ? 'Active' : 'Inactive',
         ];
+    }
+
+    private function assignedDate(Project $project): ?string
+    {
+        $pivot = $project->pivot
+            ?? $project->users()->where('users.id', auth()->id())->first()?->pivot;
+
+        return $pivot?->created_at?->format('Y-m-d');
     }
 
     private function detailResource(Project $project): array
     {
         $project->loadMissing('users', 'images');
 
+        $remaining = $project->total_budget !== null
+            ? $project->total_budget - $project->used_budget
+            : null;
+
         return [
             'id'             => $project->id,
+            'project_code'   => $project->project_code,
             'name'           => $project->name,
             'description'    => $project->description,
             'location'       => $project->location,
             'lat'            => $project->lat,
             'long'           => $project->long,
+            'category'       => $project->category,
+            'general_contractor' => $project->general_contractor,
+            'lead_architect' => $project->lead_architect,
+            'site_info'      => $project->site_info,
+            'progress'       => $project->progress,
+            'budget'         => [
+                'total'     => $project->total_budget,
+                'used'      => $project->used_budget,
+                'remaining' => $remaining,
+            ],
             'total_budget'   => $project->total_budget,
+            'assigned_date'  => $this->assignedDate($project),
             'deadline'       => $project->deadline?->format('Y-m-d'),
+            'phase'          => array_search($project->phase, Project::PHASES, true) ?: null,
+            'phase_label'    => Project::PHASE_LABELS[$project->phase] ?? null,
             'status'         => $project->status,
             'status_label'   => $project->status === 1 ? 'Active' : 'Inactive',
+            'supervisors_count'   => $project->users()->role('SUPERVISOR')->count(),
+            'pending_tasks_count' => $project->tasks()->whereIn('status', [1, 2, 3])->count(),
             'assigned_users' => $project->users->map(fn ($u) => [
                 'id'        => $u->id,
                 'full_name' => $u->full_name,

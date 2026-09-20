@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Models\Company;
 use App\Models\User;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -19,34 +20,47 @@ class AuthController extends Controller
     public function register(Request $request): JsonResponse
     {
         $request->validate([
-            'first_name' => ['required', 'string', 'max:40'],
-            'last_name'  => ['required', 'string', 'max:40'],
-            'email'      => ['required', 'email', 'max:255', 'unique:users,email'],
-            'password'   => ['required', 'confirmed', Password::min(8)],
+            'full_name'    => ['required_without:first_name', 'nullable', 'string', 'max:80'],
+            'first_name'   => ['required_without:full_name', 'nullable', 'string', 'max:40'],
+            'last_name'    => ['required_with:first_name', 'nullable', 'string', 'max:40'],
+            'email'        => ['required', 'email', 'max:255', 'unique:users,email'],
+            'phone'        => ['nullable', 'string', 'max:20', $this->uniquePhoneRule()],
+            'company_name' => ['nullable', 'string', 'max:255'],
+            'password'     => ['required', 'confirmed', Password::min(8)],
         ]);
 
-        $user = User::create([
-            'first_name' => $request->first_name,
-            'last_name'  => $request->last_name,
-            'email'      => $request->email,
-            'password'   => $request->password,
-        ]);
+        if ($request->filled('first_name')) {
+            $firstName = $request->first_name;
+            $lastName  = $request->last_name;
+        } else {
+            [$firstName, $lastName] = array_pad(preg_split('/\s+/', trim($request->full_name), 2), 2, null);
+        }
 
-        $user->assignRole('OWNER');
+        $user = DB::transaction(function () use ($request, $firstName, $lastName) {
+            $user = User::create([
+                'first_name' => $firstName,
+                'last_name'  => $lastName,
+                'email'      => $request->email,
+                'phone'      => $request->phone,
+                'password'   => $request->password,
+            ]);
+
+            $user->assignRole('OWNER');
+
+            if ($request->filled('company_name')) {
+                $company = Company::create(['legal_name' => trim($request->company_name)]);
+                $user->update(['company_id' => $company->id]);
+            }
+
+            return $user;
+        });
 
         $token = $user->createToken('api-token')->plainTextToken;
 
         return response()->json([
             'message' => 'Registration successful.',
-            'user'    => [
-                'id'         => $user->id,
-                'first_name' => $user->first_name,
-                'last_name'  => $user->last_name,
-                'full_name'  => $user->full_name,
-                'email'      => $user->email,
-                'role'       => $user->getRoleNames()->first(),
-            ],
-            'token' => $token,
+            'user'    => $this->authUserResource($user),
+            'token'   => $token,
         ], 201);
     }
 
@@ -56,15 +70,19 @@ class AuthController extends Controller
     public function login(Request $request): JsonResponse
     {
         $request->validate([
-            'email'    => ['required', 'email'],
-            'password' => ['required', 'string'],
+            'identifier' => ['required_without:email', 'nullable', 'string', 'max:255'],
+            'email'      => ['required_without:identifier', 'nullable', 'email'],
+            'password'   => ['required', 'string'],
         ]);
 
-        $user = User::where('email', $request->email)->first();
+        $field      = $request->filled('identifier') ? 'identifier' : 'email';
+        $identifier = trim($request->input($field));
+
+        $user = $this->findUserByIdentifier($identifier);
 
         if (! $user || ! Hash::check($request->password, $user->password)) {
             throw ValidationException::withMessages([
-                'email' => ['The provided credentials are incorrect.'],
+                $field => ['The provided credentials are incorrect.'],
             ]);
         }
 
@@ -86,17 +104,60 @@ class AuthController extends Controller
 
         return response()->json([
             'message' => 'Login successful.',
-            'user'    => [
-                'id'         => $user->id,
-                'first_name' => $user->first_name,
-                'last_name'  => $user->last_name,
-                'full_name'  => $user->full_name,
-                'email'      => $user->email,
-                'role'       => $user->getRoleNames()->first(),
-                'status'     => $user->status,
-            ],
-            'token' => $token,
+            'user'    => $this->authUserResource($user) + ['status' => $user->status],
+            'token'   => $token,
         ]);
+    }
+
+    private function authUserResource(User $user): array
+    {
+        $user->loadMissing('company');
+
+        return [
+            'id'         => $user->id,
+            'first_name' => $user->first_name,
+            'last_name'  => $user->last_name,
+            'full_name'  => $user->full_name,
+            'email'      => $user->email,
+            'phone'      => $user->phone,
+            'role'       => $user->getRoleNames()->first(),
+            'company'    => $user->company ? [
+                'id'         => $user->company->id,
+                'legal_name' => $user->company->legal_name,
+            ] : null,
+        ];
+    }
+
+    /**
+     * Email when the identifier contains "@", otherwise phone (matched on digits only,
+     * so "+1 (555) 867-5309" and "15558675309" find the same account).
+     */
+    private function findUserByIdentifier(string $identifier): ?User
+    {
+        if (str_contains($identifier, '@')) {
+            return User::where('email', $identifier)->first();
+        }
+
+        $digits = preg_replace('/\D+/', '', $identifier);
+
+        if ($digits === '') {
+            return null;
+        }
+
+        return User::whereRaw("REGEXP_REPLACE(phone, '[^0-9]', '') = ?", [$digits])->first();
+    }
+
+    private function uniquePhoneRule(): \Closure
+    {
+        return function (string $attribute, mixed $value, \Closure $fail) {
+            $digits = preg_replace('/\D+/', '', (string) $value);
+
+            if (strlen($digits) < 6) {
+                $fail('The phone must contain at least 6 digits.');
+            } elseif (User::whereRaw("REGEXP_REPLACE(phone, '[^0-9]', '') = ?", [$digits])->exists()) {
+                $fail('The phone has already been taken.');
+            }
+        };
     }
 
     /**

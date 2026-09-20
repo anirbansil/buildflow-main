@@ -15,16 +15,31 @@ Content-Type: application/json
 ### Register
 `POST /register`
 
+Send **either** `full_name` (the app's single Full Name field — split on the first space into first/last name) **or**
+`first_name` + `last_name` (old style, still supported).
+
 **Body**
 ```json
 {
-    "first_name": "John",
-    "last_name": "Doe",
-    "email": "john@example.com",
+    "full_name": "Sarah Jenkins",
+    "email": "sarah@example.com",
+    "phone": "+1 (555) 867-5309",
+    "company_name": "BuildCorp Infrastructure Ltd.",
     "password": "password123",
     "password_confirmation": "password123"
 }
 ```
+
+| Field | Rules |
+|---|---|
+| `full_name` | required unless `first_name` is sent, max:80 |
+| `first_name` / `last_name` | old style: `first_name` required unless `full_name` is sent (then `last_name` is required too), max:40 |
+| `email` | required, unique |
+| `phone` | optional, max:20, at least 6 digits, unique (compared on digits only, so `+1 (555) 867-5309` and `15558675309` are the same number) |
+| `company_name` | optional — creates the user's company (`legal_name`), editable later via `POST /company` |
+| `password` | required, min:8, confirmed |
+
+Self-registration always creates an `OWNER`.
 
 **Response `201`**
 ```json
@@ -32,28 +47,37 @@ Content-Type: application/json
     "message": "Registration successful.",
     "user": {
         "id": 1,
-        "first_name": "John",
-        "last_name": "Doe",
-        "full_name": "John Doe",
-        "email": "john@example.com",
-        "role": "OWNER"
+        "first_name": "Sarah",
+        "last_name": "Jenkins",
+        "full_name": "Sarah Jenkins",
+        "email": "sarah@example.com",
+        "phone": "+1 (555) 867-5309",
+        "role": "OWNER",
+        "company": { "id": 1, "legal_name": "BuildCorp Infrastructure Ltd." }
     },
     "token": "1|abc123..."
 }
 ```
+`company` is `null` when no `company_name` was sent.
 
 ---
 
 ### Login
 `POST /login`
 
+Log in with an email **or** a phone number in `identifier` (phone is matched on digits only, so any formatting works).
+The old `email` field is still accepted instead of `identifier`.
+
 **Body**
 ```json
 {
-    "email": "john@example.com",
+    "identifier": "sarah@example.com",
     "password": "password123"
 }
 ```
+or `{ "identifier": "+1 555 867 5309", "password": "password123" }`
+
+Wrong credentials return `422` with the error under `identifier` (or `email` if the old field was used).
 
 **Response `200`**
 ```json
@@ -61,9 +85,13 @@ Content-Type: application/json
     "message": "Login successful.",
     "user": {
         "id": 1,
-        "full_name": "John Doe",
-        "email": "john@example.com",
+        "first_name": "Sarah",
+        "last_name": "Jenkins",
+        "full_name": "Sarah Jenkins",
+        "email": "sarah@example.com",
+        "phone": "+1 (555) 867-5309",
         "role": "OWNER",
+        "company": { "id": 1, "legal_name": "BuildCorp Infrastructure Ltd." },
         "status": 1
     },
     "token": "1|abc123..."
@@ -209,7 +237,11 @@ Returns only active projects assigned to the authenticated user.
 | Param | Type | Description |
 |---|---|---|
 | `search` | string | Search by project name |
+| `phase` | string | `planning`, `in_progress`, `delayed`, `finishing`, `completed` (Completed / Delayed tabs) |
+| `category` | string | `commercial`, `infrastructure`, `residential` |
 | `per_page` | integer | Items per page (default: 10) |
+
+"All Active" tab = no `phase` param. `assigned_date` is when the current user was assigned to the project.
 
 **Response `200`**
 ```json
@@ -217,10 +249,17 @@ Returns only active projects assigned to the authenticated user.
     "data": [
         {
             "id": 1,
+            "project_code": "PRJ-2026-001",
             "name": "Downtown Tower",
             "location": "New York",
+            "category": "commercial",
             "total_budget": 5000000,
+            "used_budget": 1200000,
+            "progress": 45,
+            "assigned_date": "2026-07-03",
             "deadline": "2030-12-31",
+            "phase": "in_progress",
+            "phase_label": "In Progress",
             "status": 1,
             "status_label": "Active"
         }
@@ -248,15 +287,26 @@ Returns full detail of a project. The user must be assigned to it.
 {
     "data": {
         "id": 1,
+        "project_code": "PRJ-2026-001",
         "name": "Downtown Tower",
         "description": "A commercial high-rise project.",
         "location": "New York",
         "lat": 40.7128,
         "long": -74.006,
+        "category": "commercial",
+        "general_contractor": "Apex Builders Group",
+        "lead_architect": "Studio Form+Space",
+        "progress": 45,
+        "budget": { "total": 5000000, "used": 1200000, "remaining": 3800000 },
         "total_budget": 5000000,
+        "assigned_date": "2026-07-03",
         "deadline": "2030-12-31",
+        "phase": "in_progress",
+        "phase_label": "In Progress",
         "status": 1,
         "status_label": "Active",
+        "supervisors_count": 2,
+        "pending_tasks_count": 14,
         "assigned_users": [
             {
                 "id": 3,
@@ -289,8 +339,14 @@ Use `multipart/form-data` when uploading images/documents. Use `application/json
 | `lat` | number | optional, between -90 and 90 |
 | `long` | number | optional, between -180 and 180 |
 | `total_budget` | number | optional, min:0 |
+| `used_budget` | number | optional, min:0 (default 0) |
 | `deadline` | date | optional (YYYY-MM-DD) |
 | `status` | integer | optional, 1=Active 2=Inactive (default: 1) |
+| `phase` | string | optional: `planning` (default), `in_progress`, `delayed`, `finishing`, `completed` |
+| `category` | string | optional: `commercial`, `infrastructure`, `residential` |
+| `progress` | integer | optional, 0-100 (default 0) |
+| `general_contractor` | string | optional, max:255 |
+| `lead_architect` | string | optional, max:255 |
 | `assigned_users` | array | optional, array of user IDs |
 | `assigned_users.*` | integer | must exist in users table |
 | `images` | array | optional, array of files |
@@ -360,8 +416,14 @@ Use `multipart/form-data` when uploading images, otherwise `application/json`.
 | `lat` | number | between -90 and 90 |
 | `long` | number | between -180 and 180 |
 | `total_budget` | number | min:0 |
+| `used_budget` | number | min:0 |
 | `deadline` | date | YYYY-MM-DD |
 | `status` | integer | 1=Active, 2=Inactive |
+| `phase` | string | `planning`, `in_progress`, `delayed`, `finishing`, `completed` |
+| `category` | string | `commercial`, `infrastructure`, `residential` |
+| `progress` | integer | 0-100 |
+| `general_contractor` | string | max:255 |
+| `lead_architect` | string | max:255 |
 | `assigned_users` | array | replaces all assigned users |
 | `assigned_users.*` | integer | must exist in users table |
 | `images` | array | new files to upload |
@@ -559,6 +621,288 @@ Sets the task's `status` to `2` (Assigned) and stamps `assigned_at`. Fails with 
 the `SUPERVISOR` role.
 
 **Response `200`** — same shape as the task detail response.
+
+---
+
+## Materials (Project Detail → Material Allocation)
+
+The user must be assigned to the project. `status` values: `on_track`, `delayed`, `delivered`.
+
+### List Materials
+`GET /projects/{project}/materials` 🔒 — optional `per_page`.
+
+**Response `200`**
+```json
+{
+    "data": [
+        {
+            "id": 1,
+            "project_id": 1,
+            "name": "Structural Steel",
+            "unit": "Tons",
+            "estimated_qty": 4500,
+            "delivered_qty": 3200,
+            "status": "on_track",
+            "status_label": "On Track",
+            "created_at": "2026-09-22 10:00:00",
+            "updated_at": "2026-09-22 10:00:00"
+        }
+    ],
+    "meta": { "current_page": 1, "last_page": 1, "per_page": 10, "total": 1, "from": 1, "to": 1 }
+}
+```
+
+### Add Material
+`POST /projects/{project}/materials` 🔒
+
+| Field | Type | Rules |
+|---|---|---|
+| `name` | string | required, max:150 |
+| `unit` | string | required, max:50 (e.g. Tons, cu yd, sq ft) |
+| `estimated_qty` | number | required, min:0 |
+| `delivered_qty` | number | optional, min:0 (default 0) |
+| `status` | string | optional (default `on_track`) |
+
+**Response `201`** — `{ "message": "Material added successfully.", "data": { ...material } }`
+
+### Update Material
+`POST /materials/{id}/update` 🔒 — send only the fields to change (same fields/rules as above).
+
+**Response `200`** — `{ "message": "Material updated successfully.", "data": { ...material } }`
+**Response `404`** — material not found or you're not assigned to its project.
+
+> Project create/update/detail now also carry a `site_info` text field (Site Information card).
+
+---
+
+## Milestones (Project Detail → Milestones tab)
+
+The user must be assigned to the project. `status` values: `pending`, `in_progress`, `completed`.
+`is_overdue` is computed: true when the due date has passed and the milestone isn't completed.
+
+### List Milestones
+`GET /projects/{project}/milestones` 🔒 — optional `status`, `per_page`. Sorted by due date (undated last).
+
+**Response `200`**
+```json
+{
+    "data": [
+        {
+            "id": 1,
+            "project_id": 1,
+            "title": "Foundation Complete",
+            "description": "All footings poured",
+            "due_date": "2026-08-01",
+            "status": "pending",
+            "status_label": "Pending",
+            "is_overdue": true,
+            "completed_at": null,
+            "created_at": "2026-09-23 10:00:00",
+            "updated_at": "2026-09-23 10:00:00"
+        }
+    ],
+    "meta": { "current_page": 1, "last_page": 1, "per_page": 10, "total": 1, "from": 1, "to": 1 }
+}
+```
+
+### Add Milestone
+`POST /projects/{project}/milestones` 🔒
+
+| Field | Type | Rules |
+|---|---|---|
+| `title` | string | required, max:150 |
+| `description` | string | optional |
+| `due_date` | date | optional (YYYY-MM-DD) |
+| `status` | string | optional (default `pending`) |
+
+**Response `201`** — `{ "message": "Milestone created successfully.", "data": { ...milestone } }`
+
+### Update / Mark Complete
+`POST /milestones/{id}/update` 🔒 — send only the fields to change. `{"status": "completed"}` marks it complete and stamps
+`completed_at`; moving it back to another status clears `completed_at`.
+
+**Response `200`** — `{ "message": "Milestone updated successfully.", "data": { ...milestone } }`
+**Response `404`** — milestone not found or you're not assigned to its project.
+
+---
+
+## Activity (Project Detail → Recent Activity)
+
+### List Project Activity
+`GET /projects/{project}/activity` 🔒 — optional `per_page`. Newest first. The user must be assigned to the project.
+
+Entries are written automatically — there is no create endpoint. Logged actions:
+
+| `type` | Written when |
+|---|---|
+| `task_created` | a task is created |
+| `task_assigned` | a supervisor is assigned to a task |
+| `milestone_added` / `milestone_completed` | a milestone is added / first marked completed |
+| `material_added` / `material_delivered` / `material_delayed` | a material is added / its status changes to delivered / delayed |
+| `project_phase_changed` / `project_progress_updated` | the project's `phase` / `progress` actually changes |
+
+**Response `200`**
+```json
+{
+    "data": [
+        {
+            "id": 8,
+            "project_id": 1,
+            "type": "task_assigned",
+            "description": "Everett Rowe assigned to task \"Pour Level 4 slab\"",
+            "actor": { "id": 2, "full_name": "rajdip Dimj" },
+            "created_at": "2026-09-24 10:00:00",
+            "time_ago": "2 hours ago"
+        }
+    ],
+    "meta": { "current_page": 1, "last_page": 1, "per_page": 10, "total": 1, "from": 1, "to": 1 }
+}
+```
+
+---
+
+## Owner Profile
+
+Contact info + photo already come from `GET /me` and `POST /profile/update`. The two sections below are the
+**Corporate Entity** and **Compliance Documents** cards.
+
+### Get Company
+`GET /company` 🔒 — `data` is `null` until the company has been created.
+
+**Response `200`**
+```json
+{
+    "data": {
+        "id": 1,
+        "legal_name": "BuildCorp Infrastructure Ltd.",
+        "tax_id_masked": "**-***4921",
+        "registered_address": "400 Capital Blvd, Suite 1200, Metro District, NY 10001",
+        "business_type": "LLC - Commercial General Contractor",
+        "primary_operations": "Heavy Civil & Infrastructure",
+        "created_at": "2026-09-25 10:00:00",
+        "updated_at": "2026-09-25 10:00:00"
+    }
+}
+```
+The Tax ID is stored encrypted and only ever returned masked.
+
+### Create / Update Company
+`POST /company` 🔒 — creates the user's company the first time (`201`), updates it afterwards (`200`, send only the
+fields to change).
+
+| Field | Type | Rules |
+|---|---|---|
+| `legal_name` | string | required on create, max:255 |
+| `tax_id` | string | optional, max:50 |
+| `registered_address` | string | optional, max:1000 |
+| `business_type` | string | optional, max:255 |
+| `primary_operations` | string | optional, max:255 |
+
+---
+
+### List Compliance Documents
+`GET /compliance-documents` 🔒
+
+Always returns the three required slots — `insurance`, `w9`, `license` — as `status: "missing"` (with `id: null`) until
+uploaded, followed by any `other` documents. `status` is `valid`, `expired` (expiry date in the past) or `missing`.
+Returns `[]` if the user has no company yet.
+
+**Response `200`**
+```json
+{
+    "data": [
+        {
+            "id": 1,
+            "type": "insurance",
+            "title": "Certificate of Liability Insurance",
+            "status": "valid",
+            "status_label": "Valid",
+            "expiry_date": "2027-10-15",
+            "file_name": "insurance.pdf",
+            "download_url": "http://127.0.0.1:8000/api/v1/compliance-documents/1/download",
+            "updated_at": "2026-09-25"
+        },
+        {
+            "id": null,
+            "type": "license",
+            "title": "Contractor License Verification",
+            "status": "missing",
+            "status_label": "Missing",
+            "expiry_date": null,
+            "file_name": null,
+            "download_url": null,
+            "updated_at": null
+        }
+    ]
+}
+```
+
+### Upload Document
+`POST /compliance-documents` 🔒 — `multipart/form-data`. Requires the company to exist first (`422` otherwise).
+
+| Field | Type | Rules |
+|---|---|---|
+| `type` | string | required: `insurance`, `w9`, `license`, `other` |
+| `title` | string | required when `type` is `other`; otherwise defaults to the type's name |
+| `expiry_date` | date | optional (YYYY-MM-DD) |
+| `file` | file | required, pdf/jpg/jpeg/png/doc/docx, max 10MB |
+
+Uploading `insurance`, `w9` or `license` again **replaces** the previous file (and its expiry date); `other` documents accumulate.
+
+**Response `201`** — `{ "message": "Document uploaded successfully.", "data": { ...document } }`
+
+### Download Document
+`GET /compliance-documents/{id}/download` 🔒 — streams the file. Files are stored on the private disk, so the bearer
+token is required (no public URL). `404` if the document isn't part of your company.
+
+---
+
+## Settings
+
+Logout is `POST /logout` (see Authentication).
+
+### Get Settings
+`GET /settings` 🔒
+
+**Response `200`**
+```json
+{
+    "data": {
+        "notifications_enabled": true,
+        "language": "en",
+        "language_label": "English",
+        "available_languages": [
+            { "code": "en", "label": "English" },
+            { "code": "bn", "label": "Bengali" }
+        ]
+    }
+}
+```
+Use `available_languages` to build the language picker.
+
+### Update Settings
+`POST /settings` 🔒 — send only the fields to change.
+
+| Field | Type | Rules |
+|---|---|---|
+| `notifications_enabled` | boolean | optional (Email and push alerts toggle) |
+| `language` | string | optional, one of the `available_languages` codes |
+
+**Response `200`** — `{ "message": "Settings updated successfully.", "data": { ...settings } }`
+
+### Change Password
+`POST /settings/password` 🔒
+
+| Field | Type | Rules |
+|---|---|---|
+| `current_password` | string | required, must match the account's current password |
+| `password` | string | required, min:8, confirmed, different from the current password |
+| `password_confirmation` | string | required |
+
+The device making the request stays signed in; **every other device's token is revoked**.
+
+**Response `200`** — `{ "message": "Password changed successfully." }`
+**Response `422`** — wrong current password / validation errors.
 
 ---
 

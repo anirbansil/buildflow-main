@@ -5,6 +5,7 @@ namespace App\Models;
 // use Illuminate\Contracts\Auth\MustVerifyEmail;
 use Database\Factories\UserFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Foundation\Auth\User as Authenticatable;
@@ -53,6 +54,9 @@ class User extends Authenticatable implements PasskeyUser
         'title',
         'experience_years',
         'performance_score',
+        'company_id',
+        'notifications_enabled',
+        'language',
     ];
 
     protected $appends = ['full_name'];
@@ -80,6 +84,7 @@ class User extends Authenticatable implements PasskeyUser
             'email_verified_at'      => 'datetime',
             'password'               => 'hashed',
             'two_factor_confirmed_at' => 'datetime',
+            'notifications_enabled'  => 'boolean',
         ];
     }
 
@@ -93,7 +98,7 @@ class User extends Authenticatable implements PasskeyUser
 
     public function getFullNameAttribute(): string
     {
-        return "{$this->first_name} {$this->last_name}";
+        return trim("{$this->first_name} {$this->last_name}");
     }
 
     public function getDobAttribute($val)
@@ -140,5 +145,10 @@ class User extends Authenticatable implements PasskeyUser
     public function tasksAssigned(): HasMany
     {
         return $this->hasMany(Task::class, 'assigned_to');
+    }
+
+    public function company(): BelongsTo
+    {
+        return $this->belongsTo(Company::class);
     }
 }

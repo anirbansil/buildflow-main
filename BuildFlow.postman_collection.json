@@ -8,17 +8,64 @@
   "auth": {
     "type": "bearer",
     "bearer": [
-      { "key": "token", "value": "{{token}}", "type": "string" }
+      {
+        "key": "token",
+        "value": "{{token}}",
+        "type": "string"
+      }
     ]
   },
   "variable": [
-    { "key": "base_url", "value": "http://127.0.0.1:8000/api/v1", "type": "string" },
-    { "key": "token", "value": "", "type": "string" },
-    { "key": "project_id", "value": "", "type": "string" },
-    { "key": "task_id", "value": "", "type": "string" },
-    { "key": "supervisor_id", "value": "", "type": "string" },
-    { "key": "user_id", "value": "", "type": "string" },
-    { "key": "image_id", "value": "", "type": "string" }
+    {
+      "key": "base_url",
+      "value": "http://127.0.0.1:8000/api/v1",
+      "type": "string"
+    },
+    {
+      "key": "token",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "project_id",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "task_id",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "supervisor_id",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "user_id",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "image_id",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "material_id",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "milestone_id",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "compliance_document_id",
+      "value": "",
+      "type": "string"
+    }
   ],
   "item": [
     {
@@ -28,16 +75,29 @@
           "name": "Register",
           "request": {
             "method": "POST",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"first_name\": \"Jane\",\n  \"last_name\": \"Doe\",\n  \"email\": \"jane.doe@example.com\",\n  \"password\": \"password123\",\n  \"password_confirmation\": \"password123\"\n}",
-              "options": { "raw": { "language": "json" } }
+              "raw": "{\n  \"full_name\": \"Sarah Jenkins\",\n  \"email\": \"sarah.jenkins@example.com\",\n  \"phone\": \"+1 (555) 867-5309\",\n  \"company_name\": \"BuildCorp Infrastructure Ltd.\",\n  \"password\": \"password123\",\n  \"password_confirmation\": \"password123\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
             },
             "url": {
               "raw": "{{base_url}}/register",
-              "host": ["{{base_url}}"],
-              "path": ["register"]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "register"
+              ]
             }
           },
           "event": [
@@ -59,16 +119,29 @@
           "name": "Login",
           "request": {
             "method": "POST",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"email\": \"demo@yopmail.com\",\n  \"password\": \"your-password-here\"\n}",
-              "options": { "raw": { "language": "json" } }
+              "raw": "{\n  \"identifier\": \"demo@yopmail.com\",\n  \"password\": \"your-password-here\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
             },
             "url": {
               "raw": "{{base_url}}/login",
-              "host": ["{{base_url}}"],
-              "path": ["login"]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "login"
+              ]
             }
           },
           "event": [
@@ -93,8 +166,12 @@
             "header": [],
             "url": {
               "raw": "{{base_url}}/me",
-              "host": ["{{base_url}}"],
-              "path": ["me"]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "me"
+              ]
             }
           }
         },
@@ -102,16 +179,30 @@
           "name": "Update Profile",
           "request": {
             "method": "POST",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
             "body": {
               "mode": "raw",
               "raw": "{\n  \"first_name\": \"Jane\",\n  \"phone\": \"01712345678\"\n}",
-              "options": { "raw": { "language": "json" } }
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
             },
             "url": {
               "raw": "{{base_url}}/profile/update",
-              "host": ["{{base_url}}"],
-              "path": ["profile", "update"]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "profile",
+                "update"
+              ]
             }
           }
         },
@@ -122,8 +213,12 @@
             "header": [],
             "url": {
               "raw": "{{base_url}}/logout",
-              "host": ["{{base_url}}"],
-              "path": ["logout"]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "logout"
+              ]
             }
           }
         }
@@ -139,12 +234,26 @@
             "header": [],
             "url": {
               "raw": "{{base_url}}/users?role=SUPERVISOR&per_page=10",
-              "host": ["{{base_url}}"],
-              "path": ["users"],
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "users"
+              ],
               "query": [
-                { "key": "name", "value": "", "disabled": true },
-                { "key": "role", "value": "SUPERVISOR" },
-                { "key": "per_page", "value": "10" }
+                {
+                  "key": "name",
+                  "value": "",
+                  "disabled": true
+                },
+                {
+                  "key": "role",
+                  "value": "SUPERVISOR"
+                },
+                {
+                  "key": "per_page",
+                  "value": "10"
+                }
               ]
             }
           },
@@ -175,11 +284,34 @@
             "header": [],
             "url": {
               "raw": "{{base_url}}/projects?per_page=10",
-              "host": ["{{base_url}}"],
-              "path": ["projects"],
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "projects"
+              ],
               "query": [
-                { "key": "search", "value": "", "disabled": true },
-                { "key": "per_page", "value": "10" }
+                {
+                  "key": "search",
+                  "value": "",
+                  "disabled": true
+                },
+                {
+                  "key": "phase",
+                  "value": "in_progress",
+                  "disabled": true,
+                  "description": "planning | in_progress | delayed | finishing | completed"
+                },
+                {
+                  "key": "category",
+                  "value": "commercial",
+                  "disabled": true,
+                  "description": "commercial | infrastructure | residential"
+                },
+                {
+                  "key": "per_page",
+                  "value": "10"
+                }
               ]
             }
           },
@@ -205,8 +337,13 @@
             "header": [],
             "url": {
               "raw": "{{base_url}}/projects/{{project_id}}",
-              "host": ["{{base_url}}"],
-              "path": ["projects", "{{project_id}}"]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "projects",
+                "{{project_id}}"
+              ]
             }
           }
         },
@@ -214,16 +351,29 @@
           "name": "Create Project",
           "request": {
             "method": "POST",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"name\": \"Riverside Complex\",\n  \"description\": \"Residential development project.\",\n  \"location\": \"Dhaka\",\n  \"lat\": 23.8103,\n  \"long\": 90.4125,\n  \"total_budget\": 3000000,\n  \"deadline\": \"2030-06-30\",\n  \"status\": 1,\n  \"assigned_users\": []\n}",
-              "options": { "raw": { "language": "json" } }
+              "raw": "{\n  \"name\": \"Riverside Complex\",\n  \"description\": \"Residential development project.\",\n  \"location\": \"Dhaka\",\n  \"lat\": 23.8103,\n  \"long\": 90.4125,\n  \"total_budget\": 3000000,\n  \"used_budget\": 0,\n  \"deadline\": \"2030-06-30\",\n  \"status\": 1,\n  \"phase\": \"planning\",\n  \"category\": \"residential\",\n  \"progress\": 0,\n  \"general_contractor\": \"Apex Builders Group\",\n  \"lead_architect\": \"Studio Form+Space\",\n  \"assigned_users\": []\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
             },
             "url": {
               "raw": "{{base_url}}/projects",
-              "host": ["{{base_url}}"],
-              "path": ["projects"]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "projects"
+              ]
             }
           },
           "event": [
@@ -249,20 +399,56 @@
             "body": {
               "mode": "formdata",
               "formdata": [
-                { "key": "name", "value": "Riverside Complex", "type": "text" },
-                { "key": "description", "value": "Residential development project.", "type": "text" },
-                { "key": "location", "value": "Dhaka", "type": "text" },
-                { "key": "total_budget", "value": "3000000", "type": "text" },
-                { "key": "deadline", "value": "2030-06-30", "type": "text" },
-                { "key": "status", "value": "1", "type": "text" },
-                { "key": "images[]", "type": "file", "src": [] },
-                { "key": "image_names[]", "value": "Site Plan", "type": "text" }
+                {
+                  "key": "name",
+                  "value": "Riverside Complex",
+                  "type": "text"
+                },
+                {
+                  "key": "description",
+                  "value": "Residential development project.",
+                  "type": "text"
+                },
+                {
+                  "key": "location",
+                  "value": "Dhaka",
+                  "type": "text"
+                },
+                {
+                  "key": "total_budget",
+                  "value": "3000000",
+                  "type": "text"
+                },
+                {
+                  "key": "deadline",
+                  "value": "2030-06-30",
+                  "type": "text"
+                },
+                {
+                  "key": "status",
+                  "value": "1",
+                  "type": "text"
+                },
+                {
+                  "key": "images[]",
+                  "type": "file",
+                  "src": []
+                },
+                {
+                  "key": "image_names[]",
+                  "value": "Site Plan",
+                  "type": "text"
+                }
               ]
             },
             "url": {
               "raw": "{{base_url}}/projects",
-              "host": ["{{base_url}}"],
-              "path": ["projects"]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "projects"
+              ]
             }
           }
         },
@@ -270,16 +456,31 @@
           "name": "Update Project",
           "request": {
             "method": "POST",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"total_budget\": 4000000,\n  \"deadline\": \"2031-01-01\"\n}",
-              "options": { "raw": { "language": "json" } }
+              "raw": "{\n  \"phase\": \"in_progress\",\n  \"category\": \"commercial\",\n  \"progress\": 45,\n  \"used_budget\": 1200000,\n  \"general_contractor\": \"Apex Builders Group\",\n  \"lead_architect\": \"Studio Form+Space\",\n  \"site_info\": \"Zone 4, Block B. Access via West Gate (Heavy Machinery Only)\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
             },
             "url": {
               "raw": "{{base_url}}/projects/{{project_id}}/update",
-              "host": ["{{base_url}}"],
-              "path": ["projects", "{{project_id}}", "update"]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "projects",
+                "{{project_id}}",
+                "update"
+              ]
             }
           }
         },
@@ -287,16 +488,31 @@
           "name": "Assign Users to Project",
           "request": {
             "method": "POST",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
             "body": {
               "mode": "raw",
               "raw": "{\n  \"user_ids\": [\"{{user_id}}\"]\n}",
-              "options": { "raw": { "language": "json" } }
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
             },
             "url": {
               "raw": "{{base_url}}/projects/{{project_id}}/assign",
-              "host": ["{{base_url}}"],
-              "path": ["projects", "{{project_id}}", "assign"]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "projects",
+                "{{project_id}}",
+                "assign"
+              ]
             }
           }
         },
@@ -307,8 +523,14 @@
             "header": [],
             "url": {
               "raw": "{{base_url}}/projects/{{project_id}}/toggle-status",
-              "host": ["{{base_url}}"],
-              "path": ["projects", "{{project_id}}", "toggle-status"]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "projects",
+                "{{project_id}}",
+                "toggle-status"
+              ]
             }
           }
         },
@@ -319,8 +541,15 @@
             "header": [],
             "url": {
               "raw": "{{base_url}}/projects/{{project_id}}/images/{{image_id}}",
-              "host": ["{{base_url}}"],
-              "path": ["projects", "{{project_id}}", "images", "{{image_id}}"]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "projects",
+                "{{project_id}}",
+                "images",
+                "{{image_id}}"
+              ]
             }
           }
         }
@@ -333,16 +562,31 @@
           "name": "Create Task",
           "request": {
             "method": "POST",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
             "body": {
               "mode": "raw",
               "raw": "{\n  \"title\": \"Site Foundation Phase - Sector B\",\n  \"description\": \"Oversee excavation and pouring for Sector B.\",\n  \"is_critical_path\": true,\n  \"deadline\": \"2026-10-24\"\n}",
-              "options": { "raw": { "language": "json" } }
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
             },
             "url": {
               "raw": "{{base_url}}/projects/{{project_id}}/tasks",
-              "host": ["{{base_url}}"],
-              "path": ["projects", "{{project_id}}", "tasks"]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "projects",
+                "{{project_id}}",
+                "tasks"
+              ]
             }
           },
           "event": [
@@ -367,9 +611,20 @@
             "header": [],
             "url": {
               "raw": "{{base_url}}/projects/{{project_id}}/tasks?per_page=10",
-              "host": ["{{base_url}}"],
-              "path": ["projects", "{{project_id}}", "tasks"],
-              "query": [{ "key": "per_page", "value": "10" }]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "projects",
+                "{{project_id}}",
+                "tasks"
+              ],
+              "query": [
+                {
+                  "key": "per_page",
+                  "value": "10"
+                }
+              ]
             }
           },
           "event": [
@@ -394,8 +649,13 @@
             "header": [],
             "url": {
               "raw": "{{base_url}}/tasks/{{task_id}}",
-              "host": ["{{base_url}}"],
-              "path": ["tasks", "{{task_id}}"]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "tasks",
+                "{{task_id}}"
+              ]
             }
           }
         },
@@ -406,9 +666,20 @@
             "header": [],
             "url": {
               "raw": "{{base_url}}/tasks/{{task_id}}/available-supervisors?per_page=10",
-              "host": ["{{base_url}}"],
-              "path": ["tasks", "{{task_id}}", "available-supervisors"],
-              "query": [{ "key": "per_page", "value": "10" }]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "tasks",
+                "{{task_id}}",
+                "available-supervisors"
+              ],
+              "query": [
+                {
+                  "key": "per_page",
+                  "value": "10"
+                }
+              ]
             }
           },
           "event": [
@@ -430,16 +701,512 @@
           "name": "Assign Supervisor to Task",
           "request": {
             "method": "POST",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
             "body": {
               "mode": "raw",
               "raw": "{\n  \"supervisor_id\": {{supervisor_id}}\n}",
-              "options": { "raw": { "language": "json" } }
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
             },
             "url": {
               "raw": "{{base_url}}/tasks/{{task_id}}/assign-supervisor",
-              "host": ["{{base_url}}"],
-              "path": ["tasks", "{{task_id}}", "assign-supervisor"]
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "tasks",
+                "{{task_id}}",
+                "assign-supervisor"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Materials",
+      "item": [
+        {
+          "name": "Add Material",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/projects/{{project_id}}/materials",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "projects",
+                "{{project_id}}",
+                "materials"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Structural Steel\",\n  \"unit\": \"Tons\",\n  \"estimated_qty\": 4500,\n  \"delivered_qty\": 3200,\n  \"status\": \"on_track\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 201) { pm.collectionVariables.set('material_id', pm.response.json().data.id); }"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "List Materials",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/projects/{{project_id}}/materials?per_page=10",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "projects",
+                "{{project_id}}",
+                "materials"
+              ],
+              "query": [
+                {
+                  "key": "per_page",
+                  "value": "10"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 200) { const j = pm.response.json(); if (j.data.length) { pm.collectionVariables.set('material_id', j.data[0].id); } }"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Update Material",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/materials/{{material_id}}/update",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "materials",
+                "{{material_id}}",
+                "update"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"delivered_qty\": 4500,\n  \"status\": \"delivered\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Milestones",
+      "item": [
+        {
+          "name": "Add Milestone",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/projects/{{project_id}}/milestones",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "projects",
+                "{{project_id}}",
+                "milestones"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Foundation Complete\",\n  \"description\": \"All footings poured\",\n  \"due_date\": \"2026-12-15\",\n  \"status\": \"pending\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 201) { pm.collectionVariables.set('milestone_id', pm.response.json().data.id); }"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "List Milestones",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/projects/{{project_id}}/milestones?per_page=10",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "projects",
+                "{{project_id}}",
+                "milestones"
+              ],
+              "query": [
+                {
+                  "key": "per_page",
+                  "value": "10"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 200) { const j = pm.response.json(); if (j.data.length) { pm.collectionVariables.set('milestone_id', j.data[0].id); } }"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Mark Milestone Complete",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/milestones/{{milestone_id}}/update",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "milestones",
+                "{{milestone_id}}",
+                "update"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"completed\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Activity",
+      "item": [
+        {
+          "name": "List Project Activity",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/projects/{{project_id}}/activity?per_page=10",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "projects",
+                "{{project_id}}",
+                "activity"
+              ],
+              "query": [
+                {
+                  "key": "per_page",
+                  "value": "10"
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Owner Profile",
+      "item": [
+        {
+          "name": "Get Company",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/company",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "company"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Create / Update Company",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              },
+              "raw": "{\n  \"legal_name\": \"BuildCorp Infrastructure Ltd.\",\n  \"tax_id\": \"12-3454921\",\n  \"registered_address\": \"400 Capital Blvd, Suite 1200, Metro District, NY 10001\",\n  \"business_type\": \"LLC - Commercial General Contractor\",\n  \"primary_operations\": \"Heavy Civil & Infrastructure\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/company",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "company"
+              ]
+            }
+          }
+        },
+        {
+          "name": "List Compliance Documents",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/compliance-documents",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "compliance-documents"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 200) { const j = pm.response.json(); const d = j.data.find(x => x.id); if (d) { pm.collectionVariables.set('compliance_document_id', d.id); } }"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Upload Compliance Document",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "type",
+                  "value": "insurance",
+                  "type": "text",
+                  "description": "insurance | w9 | license | other"
+                },
+                {
+                  "key": "title",
+                  "value": "",
+                  "type": "text",
+                  "disabled": true,
+                  "description": "required only when type=other"
+                },
+                {
+                  "key": "expiry_date",
+                  "value": "2027-10-15",
+                  "type": "text"
+                },
+                {
+                  "key": "file",
+                  "type": "file",
+                  "src": []
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{base_url}}/compliance-documents",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "compliance-documents"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Download Compliance Document",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/compliance-documents/{{compliance_document_id}}/download",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "compliance-documents",
+                "{{compliance_document_id}}",
+                "download"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Settings",
+      "item": [
+        {
+          "name": "Get Settings",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/settings",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "settings"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Update Settings",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              },
+              "raw": "{\n  \"notifications_enabled\": false,\n  \"language\": \"bn\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/settings",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "settings"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Change Password",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              },
+              "raw": "{\n  \"current_password\": \"your-current-password\",\n  \"password\": \"newpass123\",\n  \"password_confirmation\": \"newpass123\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/settings/password",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "settings",
+                "password"
+              ]
             }
           }
         }

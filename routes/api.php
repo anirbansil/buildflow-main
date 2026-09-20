@@ -1,7 +1,13 @@
 <?php
 
+use App\Http\Controllers\Api\ActivityController;
 use App\Http\Controllers\Api\AuthController;
+use App\Http\Controllers\Api\CompanyController;
+use App\Http\Controllers\Api\ComplianceDocumentController;
+use App\Http\Controllers\Api\MaterialController;
+use App\Http\Controllers\Api\MilestoneController;
 use App\Http\Controllers\Api\ProjectController;
+use App\Http\Controllers\Api\SettingsController;
 use App\Http\Controllers\Api\TaskController;
 use App\Http\Controllers\Api\UserController;
 use Illuminate\Support\Facades\Route;
@@ -37,5 +43,30 @@ Route::prefix('v1')->group(function () {
         Route::get('/tasks/{id}',                          [TaskController::class, 'show']);
         Route::get('/tasks/{id}/available-supervisors',    [TaskController::class, 'availableSupervisors']);
         Route::post('/tasks/{id}/assign-supervisor',       [TaskController::class, 'assignSupervisor']);
+
+        // Materials
+        Route::get('/projects/{project}/materials',  [MaterialController::class, 'index']);
+        Route::post('/projects/{project}/materials', [MaterialController::class, 'store']);
+        Route::post('/materials/{id}/update',        [MaterialController::class, 'update']);
+
+        // Milestones
+        Route::get('/projects/{project}/milestones',  [MilestoneController::class, 'index']);
+        Route::post('/projects/{project}/milestones', [MilestoneController::class, 'store']);
+        Route::post('/milestones/{id}/update',        [MilestoneController::class, 'update']);
+
+        // Activity
+        Route::get('/projects/{project}/activity', [ActivityController::class, 'index']);
+
+        // Settings
+        Route::get('/settings',            [SettingsController::class, 'show']);
+        Route::post('/settings',           [SettingsController::class, 'update']);
+        Route::post('/settings/password',  [SettingsController::class, 'changePassword']);
+
+        // Owner profile: company + compliance documents
+        Route::get('/company',  [CompanyController::class, 'show']);
+        Route::post('/company', [CompanyController::class, 'save']);
+        Route::get('/compliance-documents',                [ComplianceDocumentController::class, 'index']);
+        Route::post('/compliance-documents',               [ComplianceDocumentController::class, 'store']);
+        Route::get('/compliance-documents/{id}/download',  [ComplianceDocumentController::class, 'download']);
     });
 });

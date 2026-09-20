@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Models\ActivityLog;
 use App\Models\Project;
 use App\Models\Task;
 use App\Models\User;
@@ -82,6 +83,8 @@ class TaskController extends Controller
                 'status' => 1,
                 'created_by' => $request->user()->id,
             ]);
+
+            ActivityLog::record($project->id, 'task_created', 'Task "'.$task->title.'" created', $request->user()->id);
 
             return response()->json([
                 'message' => 'Task created successfully.',
@@ -183,6 +186,13 @@ class TaskController extends Controller
                 'status' => 2,
                 'assigned_at' => now(),
             ]);
+
+            ActivityLog::record(
+                $task->project_id,
+                'task_assigned',
+                $supervisor->full_name.' assigned to task "'.$task->title.'"',
+                $request->user()->id
+            );
 
             return response()->json([
                 'message' => 'Supervisor assigned successfully.',

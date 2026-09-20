@@ -8,6 +8,24 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Project extends Model
 {
+    public const PHASES = [
+        'planning'    => 1,
+        'in_progress' => 2,
+        'delayed'     => 3,
+        'finishing'   => 4,
+        'completed'   => 5,
+    ];
+
+    public const PHASE_LABELS = [
+        1 => 'Planning',
+        2 => 'In Progress',
+        3 => 'Delayed',
+        4 => 'Finishing',
+        5 => 'Completed',
+    ];
+
+    public const CATEGORIES = ['commercial', 'infrastructure', 'residential'];
+
     protected $fillable = [
         'name',
         'description',
@@ -15,9 +33,28 @@ class Project extends Model
         'lat',
         'long',
         'total_budget',
+        'used_budget',
         'deadline',
         'status',
+        'phase',
+        'category',
+        'progress',
+        'project_code',
+        'general_contractor',
+        'lead_architect',
+        'site_info',
     ];
+
+    protected static function booted(): void
+    {
+        static::created(function (Project $project) {
+            if (! $project->project_code) {
+                $project->forceFill([
+                    'project_code' => 'PRJ-'.now()->year.'-'.str_pad((string) $project->id, 3, '0', STR_PAD_LEFT),
+                ])->saveQuietly();
+            }
+        });
+    }
 
     protected function casts(): array
     {
@@ -25,6 +62,8 @@ class Project extends Model
             'lat'          => 'float',
             'long'         => 'float',
             'total_budget' => 'float',
+            'used_budget'  => 'float',
+            'progress'     => 'integer',
             'deadline'     => 'date:Y-m-d',
         ];
     }
@@ -43,6 +82,21 @@ class Project extends Model
     public function tasks(): HasMany
     {
         return $this->hasMany(Task::class);
+    }
+
+    public function materials(): HasMany
+    {
+        return $this->hasMany(ProjectMaterial::class);
+    }
+
+    public function milestones(): HasMany
+    {
+        return $this->hasMany(Milestone::class);
+    }
+
+    public function activityLogs(): HasMany
+    {
+        return $this->hasMany(ActivityLog::class);
     }
 
     public function scopeFilter($query, array $filters): void
