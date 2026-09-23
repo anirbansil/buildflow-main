@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\ActivityLog;
 use App\Models\Milestone;
+use App\Models\UserNotification;
 use App\Models\Project;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -137,6 +138,12 @@ class MilestoneController extends Controller
 
             if ($justCompleted) {
                 ActivityLog::record($milestone->project_id, 'milestone_completed', 'Milestone "'.$milestone->title.'" completed', $request->user()->id);
+                UserNotification::notifyOwners(
+                    $milestone->project,
+                    'milestone',
+                    'Milestone Completed',
+                    'Milestone "'.$milestone->title.'" has been completed.',
+                );
             }
 
             return response()->json([

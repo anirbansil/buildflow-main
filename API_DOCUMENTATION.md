@@ -62,6 +62,47 @@ Self-registration always creates an `OWNER`.
 
 ---
 
+### Forgot Password
+`POST /forgot-password`
+
+**Body**
+```json
+{ "identifier": "sarah@example.com" }
+```
+`identifier` can be email or phone — either way, the 6-digit code is delivered to the account's **email**, since
+there's no SMS gateway. Always returns the same generic message, whether or not an account exists, so this can't be
+used to discover which emails/phones are registered.
+
+**Response `200`**
+```json
+{ "message": "If an account exists, a reset code has been sent to its email address." }
+```
+
+> In this environment `MAIL_MAILER=log`, so the email isn't actually delivered — it's written to
+> `storage/logs/laravel.log`. Set a real mail driver in `.env` for actual delivery.
+
+---
+
+### Reset Password
+`POST /reset-password`
+
+**Body**
+```json
+{
+    "identifier": "sarah@example.com",
+    "code": "849154",
+    "password": "newpassword123",
+    "password_confirmation": "newpassword123"
+}
+```
+The code expires after 15 minutes and can only be used once. On success, every existing token for that user is
+revoked — they must log in again.
+
+**Response `200`** — `{ "message": "Password reset successfully. Please log in with your new password." }`
+**Response `422`** — wrong or expired code.
+
+---
+
 ### Login
 `POST /login`
 
@@ -257,6 +298,7 @@ Returns only active projects assigned to the authenticated user.
             "used_budget": 1200000,
             "progress": 45,
             "assigned_date": "2026-07-03",
+            "start_date": "2024-01-15",
             "deadline": "2030-12-31",
             "phase": "in_progress",
             "phase_label": "In Progress",
@@ -299,8 +341,13 @@ Returns full detail of a project. The user must be assigned to it.
         "progress": 45,
         "budget": { "total": 5000000, "used": 1200000, "remaining": 3800000 },
         "total_budget": 5000000,
+        "initial_budget": 4882800,
+        "budget_variance_percent": 2.4,
+        "retainage_rate": 10,
         "assigned_date": "2026-07-03",
+        "start_date": "2024-01-15",
         "deadline": "2030-12-31",
+        "quarter_range": "Q1 2024 - Q4 2030",
         "phase": "in_progress",
         "phase_label": "In Progress",
         "status": 1,
@@ -340,6 +387,8 @@ Use `multipart/form-data` when uploading images/documents. Use `application/json
 | `long` | number | optional, between -180 and 180 |
 | `total_budget` | number | optional, min:0 |
 | `used_budget` | number | optional, min:0 (default 0) |
+| `retainage_rate` | number | optional, 0-100 (default 10) — the "(10%)" on Financial Summary's Retainage Held card |
+| `start_date` | date | optional (YYYY-MM-DD) — with `deadline`, produces `quarter_range` (e.g. "Q1 2024 - Q3 2025") on detail |
 | `deadline` | date | optional (YYYY-MM-DD) |
 | `status` | integer | optional, 1=Active 2=Inactive (default: 1) |
 | `phase` | string | optional: `planning` (default), `in_progress`, `delayed`, `finishing`, `completed` |
@@ -417,6 +466,8 @@ Use `multipart/form-data` when uploading images, otherwise `application/json`.
 | `long` | number | between -180 and 180 |
 | `total_budget` | number | min:0 |
 | `used_budget` | number | min:0 |
+| `retainage_rate` | number | 0-100 |
+| `start_date` | date | YYYY-MM-DD |
 | `deadline` | date | YYYY-MM-DD |
 | `status` | integer | 1=Active, 2=Inactive |
 | `phase` | string | `planning`, `in_progress`, `delayed`, `finishing`, `completed` |
@@ -903,6 +954,360 @@ The device making the request stays signed in; **every other device's token is r
 
 **Response `200`** — `{ "message": "Password changed successfully." }`
 **Response `422`** — wrong current password / validation errors.
+
+---
+
+## Submissions (Submission Review — page 9)
+
+Status flow: `pending` → optionally `in_review` (a supervisor starts reviewing it) → a supervisor verifies it →
+`pending_final_approval` → the Owner decides: `approved`, `rejected` or `revision_requested`. `verify()` accepts a
+submission in either `pending` or `in_review`, so `start-review` is an optional step, not a required one.
+
+> `POST /tasks/{task}/submissions` (worker), `POST /submissions/{id}/start-review` and `POST /submissions/{id}/verify`
+> (supervisor) are included so a submission exists to review — the Owner-side actions are list/detail and
+> approve/reject/request-revision.
+
+### Start Review (Supervisor)
+`POST /submissions/{id}/start-review` 🔒 — caller must have the SUPERVISOR role; the submission must currently be
+`pending`. Moves it to `in_review`. `422` if it's already past `pending`.
+
+### List Submissions
+`GET /submissions` 🔒 — across every project you're assigned to. Optional `status`, `project_id`, `search` (matches
+task title), `per_page`.
+
+**Response `200`**
+```json
+{
+    "data": [
+        {
+            "id": 1,
+            "code": "SUB-0001",
+            "task_id": 3,
+            "task_title": "Pour Level 4 slab",
+            "worker": { "id": 8, "full_name": "Tavares Larson", "title": "Concrete Crew" },
+            "status": "pending_final_approval",
+            "status_label": "Pending Final Approval",
+            "submitted_at": "2026-09-27 10:00:00"
+        }
+    ],
+    "meta": { "current_page": 1, "last_page": 1, "per_page": 10, "total": 1, "from": 1, "to": 1 }
+}
+```
+
+### View Submission Detail
+`GET /submissions/{id}` 🔒
+
+**Response `200`**
+```json
+{
+    "data": {
+        "id": 1,
+        "code": "SUB-0001",
+        "task": { "id": 3, "title": "Pour Level 4 slab" },
+        "project_id": 1,
+        "worker": { "id": 8, "full_name": "Tavares Larson", "title": "Concrete Crew" },
+        "quantity": 150,
+        "unit": "cu yd",
+        "worker_description": "Completed pour for zone B footings.",
+        "status": "pending_final_approval",
+        "status_label": "Pending Final Approval",
+        "supervisor_verification": {
+            "supervisor": {
+                "id": 3, "full_name": "Sarah Davis", "title": "Site Superintendent",
+                "profile_photo": "http://127.0.0.1:8000/storage/profile_photo/photo.jpg"
+            },
+            "comment": "I visually inspected the rebar cage layout prior to the pour. Spacing is within tolerance.",
+            "reviewed_at": "2026-09-27 10:15:00"
+        },
+        "owner_decision": null,
+        "media": [
+            { "id": 1, "file_name": "photo1.jpg", "url": "http://127.0.0.1:8000/storage/submission_media/1/xyz.jpg" }
+        ],
+        "submitted_at": "2026-09-27 10:00:00",
+        "updated_at": "2026-09-27 10:15:00"
+    }
+}
+```
+
+### Submit Work
+`POST /tasks/{task}/submissions` 🔒 — `multipart/form-data` when attaching media.
+
+| Field | Type | Rules |
+|---|---|---|
+| `worker_id` | integer | required, must be a user with the WORKER role |
+| `quantity` | number | optional, min:0 |
+| `unit` | string | optional, max:50 |
+| `worker_description` | string | optional |
+| `media` | array of files | optional, jpg/jpeg/png/webp/pdf, max 10MB each |
+
+**Response `201`** — `{ "message": "Submission created successfully.", "data": { ...submission } }`
+
+### Verify (Supervisor)
+`POST /submissions/{id}/verify` 🔒 — caller must have the SUPERVISOR role. Body: `{"supervisor_comment": "..."}`
+(required). Moves status to `pending_final_approval`.
+
+### Final Approve / Reject / Request Revision (Owner)
+- `POST /submissions/{id}/approve` — body `{"comment": "..."}` optional.
+- `POST /submissions/{id}/reject` — body `{"comment": "..."}` **required**.
+- `POST /submissions/{id}/request-revision` — body `{"comment": "..."}` **required**.
+
+Each returns `{ "message": "Submission updated successfully.", "data": { ...submission } }` with `owner_decision`
+filled in.
+
+---
+
+## Payments
+
+Status flow: `pending_approval` → `approved` → `cleared`, or `rejected` at any point (any status can move to any other —
+the Owner can override). Clearing a payment **adds its amount to the project's `used_budget`** (Project Detail's
+Budget Used). `is_retainage` marks a line item as retainage; `retainage_held` on the summary is the sum of retainage
+payments not yet cleared.
+
+### Global Ledger
+`GET /payments` 🔒 — across every project you're assigned to (Reports & Ledger table). Each row includes its
+`project`. Optional `status`, `date_from`, `date_to` (filtered on the request date), `search` (contractor name),
+`per_page`.
+
+### Project Payment Requests
+`GET /projects/{project}/payments` 🔒 — same filters, scoped to one project (Financial Summary's table).
+
+**Response `200`**
+```json
+{
+    "data": [
+        {
+            "id": 1,
+            "contractor_name": "Apex Structural Steel",
+            "contact_name": "Marcus Vance",
+            "invoice_number": "INV-4029",
+            "work_package": "Level 4 Beam Erection",
+            "task_id": null,
+            "description": null,
+            "amount": 425500,
+            "is_retainage": true,
+            "status": "cleared",
+            "status_label": "Cleared",
+            "requested_by": "rajdip Dimj",
+            "approved_by": "rajdip Dimj",
+            "approved_at": "2026-09-28 10:00:00",
+            "cleared_at": "2026-09-28 10:05:00",
+            "rejected_reason": null,
+            "created_at": "2026-09-28 09:00:00"
+        }
+    ],
+    "meta": { "current_page": 1, "last_page": 1, "per_page": 10, "total": 1, "from": 1, "to": 1 }
+}
+```
+
+### Add Record
+`POST /projects/{project}/payments` 🔒
+
+| Field | Type | Rules |
+|---|---|---|
+| `contractor_name` | string | required, max:255 |
+| `contact_name` | string | optional, max:255 |
+| `invoice_number` | string | optional, max:100 |
+| `work_package` | string | optional, max:255 — free-text label |
+| `task_id` | integer | optional, must belong to the same project |
+| `description` | string | optional |
+| `amount` | number | required, min:0 |
+| `is_retainage` | boolean | optional |
+
+**Response `201`** — `{ "message": "Payment request added successfully.", "data": { ...payment } }`
+
+### Approve / Clear / Reject
+- `POST /payments/{id}/approve`
+- `POST /payments/{id}/clear` — bumps the project's `used_budget`
+- `POST /payments/{id}/reject` — body `{"reason": "..."}` **required**
+
+Each returns `{ "message": "Payment updated successfully.", "data": { ...payment } }`.
+
+### Financial Summary
+`GET /projects/{project}/financial-summary` 🔒
+
+`total_approved_budget_variance_percent` compares the project's current `total_budget` against its `initial_budget`
+— the budget captured once when the project was created and never changed afterward, even as `total_budget` is
+revised over time via Update Project. Positive means the budget has grown since the original estimate.
+
+**Response `200`**
+```json
+{
+    "data": {
+        "total_approved_budget": 5000000,
+        "budget_consumed": 1200000,
+        "budget_consumed_percent": 24.0,
+        "pending_approval": { "amount": 425500, "count": 12 },
+        "cleared_this_month": { "amount": 1240000, "count": 45 },
+        "retainage_held": { "amount": 1180800, "rate_percent": 10 },
+        "total_approved_budget_variance_percent": 2.4
+    }
+}
+```
+
+---
+
+## Reports & Export
+
+> Productivity report (labor hours, equipment utilization, daily logs) is not built — there's no labor-hour/daily-log
+> tracking in the app yet, and the PDF has no screen for it either. Ask for it separately if it's needed; it would
+> need a new table.
+>
+> Project Report also doesn't include RFI (Request for Information) logs or submittal status — those are only
+> mentioned as description text on the Reports & Ledger card, never shown as real data on any PDF screen, and would
+> need their own new tables (same as Productivity). It currently covers milestones and tasks only.
+
+### Project Report
+`GET /projects/{project}/reports/project` 🔒 — milestone and task status breakdown for one project ("Generate
+Report").
+
+**Response `200`**
+```json
+{
+    "data": {
+        "project": { "id": 1, "name": "DLF", "project_code": "PRJ-2026-001" },
+        "milestones": { "total": 2, "pending": 1, "in_progress": 0, "completed": 1, "overdue": 1 },
+        "tasks": { "total": 1, "pending": 1, "assigned": 0, "in_progress": 0, "completed": 0, "critical_path": 1 },
+        "generated_at": "2026-09-28 10:00:00"
+    }
+}
+```
+
+### Budget Report
+`GET /reports/budget` 🔒 — across every project you're assigned to; optional `?project_id=` to narrow to one
+("View Variance"). `variance_percent` is `(used_budget - total_budget) / total_budget * 100` — positive means over
+budget, negative means under.
+
+**Response `200`**
+```json
+{
+    "data": {
+        "projects": [
+            {
+                "id": 1, "name": "DLF", "project_code": "PRJ-2026-001",
+                "total_budget": 3000000, "used_budget": 3072000, "remaining_budget": -72000,
+                "used_percent": 102.4, "variance_percent": 2.4, "status": "over"
+            }
+        ],
+        "totals": { "total_budget": 3000000, "used_budget": 3072000, "remaining_budget": -72000, "variance_percent": 2.4 },
+        "generated_at": "2026-09-28 10:00:00"
+    }
+}
+```
+
+### Export Ledger
+`GET /payments/export` 🔒 — downloads a CSV of the Global Ledger, same filters as `GET /payments`
+(`status`, `date_from`, `date_to`, `search`, scoped to your assigned projects). Columns: Date, Project, Contractor,
+Invoice #, Work Package, Description, Amount, Retainage, Status. Opens directly in Excel — there's no separate PDF
+export; ask if you specifically need a PDF file (it would add a PDF-generation package).
+
+---
+
+## Notifications
+
+There's no create endpoint — entries are written automatically for the project's OWNERs. `type` is one of
+`critical_alert`, `action_required`, `milestone`, `financial`, `task`.
+
+| Trigger | `type` |
+|---|---|
+| A worker submits work | `task` |
+| A supervisor verifies a submission | `action_required` |
+| A material is marked delayed | `critical_alert` |
+| A milestone is completed | `milestone` |
+| A payment request is added | `financial` ("Payment Request Pending") |
+| A payment is approved | `financial` ("Invoice Approved") |
+| A payment is cleared | `financial` ("Payment Processed") |
+
+> `notifications_enabled` (from Settings) isn't enforced here — it would control an actual push notification, and
+> there's no push (APNs/FCM) integration in this app. Rows are always written; the feed always shows them.
+
+### List Notifications
+`GET /notifications` 🔒 — newest first. Optional `unread_only` (`true`/`1`), `type`, `per_page`.
+
+**Response `200`**
+```json
+{
+    "data": [
+        {
+            "id": 6,
+            "project": { "id": 1, "name": "DLF" },
+            "type": "action_required",
+            "title": "Submission Ready for Final Approval",
+            "body": "Supervisor verification complete for \"Pour Level 4 slab\".",
+            "action_url": "/submissions/3",
+            "is_read": false,
+            "created_at": "2026-09-29 10:00:00",
+            "time_ago": "2 hours ago"
+        }
+    ],
+    "meta": { "current_page": 1, "last_page": 1, "per_page": 10, "total": 1, "from": 1, "to": 1 }
+}
+```
+
+### Unread Count
+`GET /notifications/unread-count` 🔒 — `{ "data": { "unread_count": 5 } }`, for the bell badge.
+
+### Mark as Read
+`POST /notifications/{id}/read` 🔒 — marks one. `POST /notifications/read-all` 🔒 — marks every unread one for the
+user, returns `{ "message": "5 notification(s) marked as read." }`.
+
+---
+
+## Dashboard
+
+Combines every module above into the Owner's home screen. Scoped to active (`status: 1`) assigned projects only,
+same as `GET /me`.
+
+### `GET /dashboard` 🔒
+
+**Response `200`**
+```json
+{
+    "data": {
+        "user": {
+            "id": 2,
+            "first_name": "Sarah",
+            "full_name": "Sarah Jenkins",
+            "profile_photo": "http://127.0.0.1:8000/storage/profile_photo/photo.jpg"
+        },
+        "stats": {
+            "assigned_projects": 14,
+            "active_supervisors": 8,
+            "pending_approvals": 5,
+            "budget_used": 18400000,
+            "budget_used_percent": 61.3
+        },
+        "project_overview": [
+            { "id": 1, "name": "Downtown Metro", "phase": "in_progress", "phase_label": "In Progress", "progress": 45 }
+        ],
+        "pending_actions": [
+            {
+                "type": "material_shortage",
+                "title": "Material Shortage",
+                "subtitle": "Riverside Bridge - Steel Beams",
+                "project_id": 2,
+                "reference_id": 7,
+                "action": "Resolve",
+                "created_at": "2026-09-30 09:00:00"
+            }
+        ],
+        "recent_activity": [
+            {
+                "id": 42,
+                "project_id": 1,
+                "type": "task_created",
+                "description": "Task \"Night Shift\" created",
+                "actor": "rajdip Dimj",
+                "time_ago": "2 hours ago"
+            }
+        ]
+    }
+}
+```
+
+`pending_approvals` = submissions in `pending_final_approval` + payments in `pending_approval`, across every active
+project. `pending_actions` merges up to 10 each of: materials marked `delayed`, tasks with no supervisor assigned yet,
+and payments awaiting approval — newest first, capped at 10 total. `recent_activity` is the 10 latest Activity Log
+entries across every active project. `project_overview` is up to 5 projects, most recently updated first.
 
 ---
 

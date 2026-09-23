@@ -26,6 +26,30 @@ class Project extends Model
 
     public const CATEGORIES = ['commercial', 'infrastructure', 'residential'];
 
+    public function quarterLabel(): ?string
+    {
+        if (! $this->start_date || ! $this->deadline) {
+            return null;
+        }
+
+        $quarterOf = fn ($date) => 'Q'.(int) ceil($date->month / 3).' '.$date->year;
+
+        return $quarterOf($this->start_date).' - '.$quarterOf($this->deadline);
+    }
+
+    /**
+     * How much total_budget has grown from initial_budget, as a percent. Positive = over the
+     * original estimate. Null when there's nothing to compare against.
+     */
+    public function budgetVariancePercent(): ?float
+    {
+        if (! $this->initial_budget || $this->initial_budget <= 0 || $this->total_budget === null) {
+            return null;
+        }
+
+        return round((($this->total_budget - $this->initial_budget) / $this->initial_budget) * 100, 1);
+    }
+
     protected $fillable = [
         'name',
         'description',
@@ -33,7 +57,10 @@ class Project extends Model
         'lat',
         'long',
         'total_budget',
+        'initial_budget',
         'used_budget',
+        'retainage_rate',
+        'start_date',
         'deadline',
         'status',
         'phase',
@@ -47,6 +74,12 @@ class Project extends Model
 
     protected static function booted(): void
     {
+        static::creating(function (Project $project) {
+            if ($project->initial_budget === null) {
+                $project->initial_budget = $project->total_budget;
+            }
+        });
+
         static::created(function (Project $project) {
             if (! $project->project_code) {
                 $project->forceFill([
@@ -62,8 +95,11 @@ class Project extends Model
             'lat'          => 'float',
             'long'         => 'float',
             'total_budget' => 'float',
+            'initial_budget' => 'float',
             'used_budget'  => 'float',
+            'retainage_rate' => 'float',
             'progress'     => 'integer',
+            'start_date'   => 'date:Y-m-d',
             'deadline'     => 'date:Y-m-d',
         ];
     }
@@ -97,6 +133,16 @@ class Project extends Model
     public function activityLogs(): HasMany
     {
         return $this->hasMany(ActivityLog::class);
+    }
+
+    public function submissions(): HasMany
+    {
+        return $this->hasMany(Submission::class);
+    }
+
+    public function payments(): HasMany
+    {
+        return $this->hasMany(Payment::class);
     }
 
     public function scopeFilter($query, array $filters): void

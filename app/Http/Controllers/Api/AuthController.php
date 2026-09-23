@@ -9,6 +9,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Mail;
 use Illuminate\Validation\Rules\Password;
 use Illuminate\Validation\ValidationException;
 
@@ -107,6 +108,77 @@ class AuthController extends Controller
             'user'    => $this->authUserResource($user) + ['status' => $user->status],
             'token'   => $token,
         ]);
+    }
+
+    /**
+     * Send a 6-digit reset code to the account's email (identifier can be email or phone —
+     * either way, the code is delivered to the email on file, since there's no SMS gateway).
+     * Always returns the same generic message, so this can't be used to discover which
+     * emails/phones have accounts.
+     *
+     * POST /api/v1/forgot-password
+     */
+    public function forgotPassword(Request $request): JsonResponse
+    {
+        $request->validate([
+            'identifier' => ['required', 'string', 'max:255'],
+        ]);
+
+        $user = $this->findUserByIdentifier(trim($request->identifier));
+        $generic = ['message' => 'If an account exists, a reset code has been sent to its email address.'];
+
+        if (! $user) {
+            return response()->json($generic);
+        }
+
+        $code = (string) random_int(100000, 999999);
+
+        DB::table('password_reset_tokens')->updateOrInsert(
+            ['email' => $user->email],
+            ['token' => Hash::make($code), 'created_at' => now()]
+        );
+
+        Mail::raw(
+            "Your BuildFlow password reset code is: {$code}\nThis code expires in 15 minutes.",
+            fn ($message) => $message->to($user->email)->subject('BuildFlow password reset code')
+        );
+
+        return response()->json($generic);
+    }
+
+    /**
+     * Reset password using the 6-digit code sent by forgot-password.
+     * Revokes every existing token, so the user must log in again afterwards.
+     *
+     * POST /api/v1/reset-password
+     */
+    public function resetPassword(Request $request): JsonResponse
+    {
+        $request->validate([
+            'identifier' => ['required', 'string', 'max:255'],
+            'code' => ['required', 'string'],
+            'password' => ['required', 'confirmed', Password::min(8)],
+        ]);
+
+        $user = $this->findUserByIdentifier(trim($request->identifier));
+
+        $row = $user ? DB::table('password_reset_tokens')->where('email', $user->email)->first() : null;
+
+        $valid = $row
+            && Hash::check($request->code, $row->token)
+            && now()->diffInMinutes($row->created_at) <= 15;
+
+        if (! $valid) {
+            throw ValidationException::withMessages([
+                'code' => ['This reset code is invalid or has expired.'],
+            ]);
+        }
+
+        $user->update(['password' => $request->password]);
+        $user->tokens()->delete();
+        DB::table('password_reset_tokens')->where('email', $user->email)->delete();
+
+        return response()->json(['message' => 'Password reset successfully. Please log in with your new password.']);
     }
 
     private function authUserResource(User $user): array

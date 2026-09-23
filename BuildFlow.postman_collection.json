@@ -65,6 +65,26 @@
       "key": "compliance_document_id",
       "value": "",
       "type": "string"
+    },
+    {
+      "key": "submission_id",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "worker_id",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "payment_id",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "notification_id",
+      "value": "",
+      "type": "string"
     }
   ],
   "item": [
@@ -116,6 +136,66 @@
           ]
         },
         {
+          "name": "forgot-password",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"identifier\": \"demo@yopmail.com\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/forgot-password",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "forgot-password"
+              ]
+            }
+          }
+        },
+        {
+          "name": "reset-password",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"identifier\": \"demo@yopmail.com\",\n  \"code\": \"000000\",\n  \"password\": \"newpass123\",\n  \"password_confirmation\": \"newpass123\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/reset-password",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "reset-password"
+              ]
+            }
+          }
+        },
+        {
           "name": "Login",
           "request": {
             "method": "POST",
@@ -127,7 +207,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"identifier\": \"demo@yopmail.com\",\n  \"password\": \"your-password-here\"\n}",
+              "raw": "{\n  \"identifier\": \"demo@yopmail.com\",\n  \"password\": \"newpass123\"\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -218,6 +298,27 @@
               ],
               "path": [
                 "logout"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Dashboard",
+      "item": [
+        {
+          "name": "Get Dashboard",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/dashboard",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "dashboard"
               ]
             }
           }
@@ -359,7 +460,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"name\": \"Riverside Complex\",\n  \"description\": \"Residential development project.\",\n  \"location\": \"Dhaka\",\n  \"lat\": 23.8103,\n  \"long\": 90.4125,\n  \"total_budget\": 3000000,\n  \"used_budget\": 0,\n  \"deadline\": \"2030-06-30\",\n  \"status\": 1,\n  \"phase\": \"planning\",\n  \"category\": \"residential\",\n  \"progress\": 0,\n  \"general_contractor\": \"Apex Builders Group\",\n  \"lead_architect\": \"Studio Form+Space\",\n  \"assigned_users\": []\n}",
+              "raw": "{\n  \"name\": \"Riverside Complex\",\n  \"description\": \"Residential development project.\",\n  \"location\": \"Dhaka\",\n  \"lat\": 23.8103,\n  \"long\": 90.4125,\n  \"total_budget\": 3000000,\n  \"used_budget\": 0,\n  \"start_date\": \"2024-01-15\",\n  \"deadline\": \"2030-06-30\",\n  \"status\": 1,\n  \"phase\": \"planning\",\n  \"category\": \"residential\",\n  \"progress\": 0,\n  \"general_contractor\": \"Apex Builders Group\",\n  \"lead_architect\": \"Studio Form+Space\",\n  \"assigned_users\": []\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -464,7 +565,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"phase\": \"in_progress\",\n  \"category\": \"commercial\",\n  \"progress\": 45,\n  \"used_budget\": 1200000,\n  \"general_contractor\": \"Apex Builders Group\",\n  \"lead_architect\": \"Studio Form+Space\",\n  \"site_info\": \"Zone 4, Block B. Access via West Gate (Heavy Machinery Only)\"\n}",
+              "raw": "{\n  \"phase\": \"in_progress\",\n  \"category\": \"commercial\",\n  \"progress\": 45,\n  \"used_budget\": 1200000,\n  \"general_contractor\": \"Apex Builders Group\",\n  \"lead_architect\": \"Studio Form+Space\",\n  \"site_info\": \"Zone 4, Block B. Access via West Gate (Heavy Machinery Only)\",\n  \"start_date\": \"2024-01-15\",\n  \"retainage_rate\": 10\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -1206,6 +1307,612 @@
               "path": [
                 "settings",
                 "password"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Submissions",
+      "item": [
+        {
+          "name": "Submit Work (with media)",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "worker_id",
+                  "value": "{{worker_id}}",
+                  "type": "text",
+                  "description": "must be a user with the WORKER role"
+                },
+                {
+                  "key": "quantity",
+                  "value": "150",
+                  "type": "text"
+                },
+                {
+                  "key": "unit",
+                  "value": "cu yd",
+                  "type": "text"
+                },
+                {
+                  "key": "worker_description",
+                  "value": "Completed pour for zone B footings.",
+                  "type": "text"
+                },
+                {
+                  "key": "media[]",
+                  "type": "file",
+                  "src": []
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{base_url}}/tasks/{{task_id}}/submissions",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "tasks",
+                "{{task_id}}",
+                "submissions"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 201) { pm.collectionVariables.set('submission_id', pm.response.json().data.id); }"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "List Submissions",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/submissions?per_page=10",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "submissions"
+              ],
+              "query": [
+                {
+                  "key": "per_page",
+                  "value": "10"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 200) { const j = pm.response.json(); if (j.data.length) { pm.collectionVariables.set('submission_id', j.data[0].id); } }"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "View Submission Detail",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/submissions/{{submission_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "submissions",
+                "{{submission_id}}"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Start Review (Supervisor)",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/submissions/{{submission_id}}/start-review",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "submissions",
+                "{{submission_id}}",
+                "start-review"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Verify (Supervisor)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/submissions/{{submission_id}}/verify",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "submissions",
+                "{{submission_id}}",
+                "verify"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"supervisor_comment\": \"I visually inspected the rebar cage layout prior to the pour. Spacing is within tolerance.\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Final Approve (Owner)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/submissions/{{submission_id}}/approve",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "submissions",
+                "{{submission_id}}",
+                "approve"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"comment\": \"Looks good.\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Reject (Owner)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/submissions/{{submission_id}}/reject",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "submissions",
+                "{{submission_id}}",
+                "reject"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"comment\": \"Quantity does not match site log.\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "Request Revision (Owner)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/submissions/{{submission_id}}/request-revision",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "submissions",
+                "{{submission_id}}",
+                "request-revision"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"comment\": \"Please attach slump test results.\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Payments",
+      "item": [
+        {
+          "name": "Add Payment Record",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/projects/{{project_id}}/payments",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "projects",
+                "{{project_id}}",
+                "payments"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"contractor_name\": \"Apex Structural Steel\",\n  \"contact_name\": \"Marcus Vance\",\n  \"invoice_number\": \"INV-4029\",\n  \"work_package\": \"Level 4 Beam Erection\",\n  \"amount\": 425500,\n  \"is_retainage\": true\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 201) { pm.collectionVariables.set('payment_id', pm.response.json().data.id); }"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "List Project Payments",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/projects/{{project_id}}/payments?per_page=10",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "projects",
+                "{{project_id}}",
+                "payments"
+              ],
+              "query": [
+                {
+                  "key": "per_page",
+                  "value": "10"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 200) { const j = pm.response.json(); if (j.data.length) { pm.collectionVariables.set('payment_id', j.data[0].id); } }"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Global Payment Ledger",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/payments?per_page=10",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "payments"
+              ],
+              "query": [
+                {
+                  "key": "per_page",
+                  "value": "10"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Financial Summary",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/projects/{{project_id}}/financial-summary",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "projects",
+                "{{project_id}}",
+                "financial-summary"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Approve Payment",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/payments/{{payment_id}}/approve",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "payments",
+                "{{payment_id}}",
+                "approve"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Clear Payment",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/payments/{{payment_id}}/clear",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "payments",
+                "{{payment_id}}",
+                "clear"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Reject Payment",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/payments/{{payment_id}}/reject",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "payments",
+                "{{payment_id}}",
+                "reject"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reason\": \"Quantity mismatch with site log.\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Reports & Export",
+      "item": [
+        {
+          "name": "Project Report",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/projects/{{project_id}}/reports/project",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "projects",
+                "{{project_id}}",
+                "reports",
+                "project"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Budget Report",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/reports/budget",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "reports",
+                "budget"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Export Ledger (CSV)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/payments/export?status=cleared",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "payments",
+                "export"
+              ],
+              "query": [
+                {
+                  "key": "status",
+                  "value": "cleared"
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Notifications",
+      "item": [
+        {
+          "name": "List Notifications",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/notifications?per_page=10",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "notifications"
+              ],
+              "query": [
+                {
+                  "key": "per_page",
+                  "value": "10"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 200) { const j = pm.response.json(); if (j.data.length) { pm.collectionVariables.set('notification_id', j.data[0].id); } }"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Unread Count",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/notifications/unread-count",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "notifications",
+                "unread-count"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Mark Notification Read",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/notifications/{{notification_id}}/read",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "notifications",
+                "{{notification_id}}",
+                "read"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Mark All Read",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/notifications/read-all",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "notifications",
+                "read-all"
               ]
             }
           }

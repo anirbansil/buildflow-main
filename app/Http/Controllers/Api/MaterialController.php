@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\ActivityLog;
 use App\Models\Project;
+use App\Models\UserNotification;
 use App\Models\ProjectMaterial;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -128,6 +129,12 @@ class MaterialController extends Controller
                 ActivityLog::record($material->project_id, 'material_delivered', 'Material "'.$material->name.'" delivered', $request->user()->id);
             } elseif ($statusChangedTo === 'delayed') {
                 ActivityLog::record($material->project_id, 'material_delayed', 'Material "'.$material->name.'" marked delayed', $request->user()->id);
+                UserNotification::notifyOwners(
+                    $material->project,
+                    'critical_alert',
+                    'Material Delivery Delayed',
+                    'Material "'.$material->name.'" is now marked delayed.',
+                );
             }
 
             return response()->json([

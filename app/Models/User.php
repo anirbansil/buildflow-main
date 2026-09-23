@@ -151,4 +151,12 @@ class User extends Authenticatable implements PasskeyUser
     {
         return $this->belongsTo(Company::class);
     }
+
+    /**
+     * In-app notifications (distinct from Notifiable::notifications(), which is Laravel's own system).
+     */
+    public function appNotifications(): HasMany
+    {
+        return $this->hasMany(UserNotification::class, 'user_id');
+    }
 }
