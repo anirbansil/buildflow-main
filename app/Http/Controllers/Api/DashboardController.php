@@ -4,12 +4,14 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\ActivityLog;
+use App\Models\Earning;
 use App\Models\Payment;
 use App\Models\Project;
 use App\Models\ProjectMaterial;
 use App\Models\Submission;
 use App\Models\Task;
 use App\Models\User;
+use App\Models\UserNotification;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
@@ -63,6 +65,59 @@ class DashboardController extends Controller
                         'actor' => $log->user?->full_name,
                         'time_ago' => $log->created_at?->diffForHumans(),
                     ]),
+            ],
+        ]);
+    }
+
+    /**
+     * Worker Dashboard: greeting, pending/submitted task counts, pending earnings, and
+     * recent notifications.
+     *
+     * GET /api/v1/worker-dashboard
+     */
+    public function worker(Request $request): JsonResponse
+    {
+        $user = $request->user();
+
+        $pendingTasks = Task::where('assigned_worker_id', $user->id)
+            ->whereIn('status', [Task::STATUSES['pending'], Task::STATUSES['assigned']])
+            ->count();
+
+        $submittedTasks = Task::where('assigned_worker_id', $user->id)
+            ->where('status', Task::STATUSES['submitted'])
+            ->count();
+
+        $pendingEarnings = Earning::where('worker_id', $user->id)
+            ->where('status', Earning::STATUSES['pending'])
+            ->sum('amount');
+
+        $notifications = $user->appNotifications()
+            ->orderByDesc('created_at')
+            ->limit(5)
+            ->get()
+            ->map(fn (UserNotification $n) => [
+                'id' => $n->id,
+                'type' => $n->type,
+                'title' => $n->title,
+                'body' => $n->body,
+                'is_read' => $n->read_at !== null,
+                'time_ago' => $n->created_at?->diffForHumans(),
+            ]);
+
+        return response()->json([
+            'data' => [
+                'user' => [
+                    'id' => $user->id,
+                    'first_name' => $user->first_name,
+                    'full_name' => $user->full_name,
+                    'profile_photo' => $user->profile_photo ? url('storage/'.$user->profile_photo) : null,
+                ],
+                'stats' => [
+                    'pending_tasks' => $pendingTasks,
+                    'submitted_tasks' => $submittedTasks,
+                    'earnings' => round($pendingEarnings, 2),
+                ],
+                'notifications' => $notifications,
             ],
         ]);
     }

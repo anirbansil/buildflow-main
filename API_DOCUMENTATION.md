@@ -36,10 +36,11 @@ Send **either** `full_name` (the app's single Full Name field — split on the f
 | `first_name` / `last_name` | old style: `first_name` required unless `full_name` is sent (then `last_name` is required too), max:40 |
 | `email` | required, unique |
 | `phone` | optional, max:20, at least 6 digits, unique (compared on digits only, so `+1 (555) 867-5309` and `15558675309` are the same number) |
-| `company_name` | optional — creates the user's company (`legal_name`), editable later via `POST /company` |
+| `company_name` | optional — creates the user's company (`legal_name`), editable later via `POST /company`. Ignored unless `role` is `owner` |
+| `role` | optional: `owner` (default), `supervisor`, `worker` |
 | `password` | required, min:8, confirmed |
 
-Self-registration always creates an `OWNER`.
+Defaults to `OWNER` when `role` isn't sent, so existing callers are unaffected.
 
 **Response `201`**
 ```json
@@ -109,6 +110,9 @@ revoked — they must log in again.
 Log in with an email **or** a phone number in `identifier` (phone is matched on digits only, so any formatting works).
 The old `email` field is still accepted instead of `identifier`.
 
+Allowed roles: `OWNER`, `SUPERVISOR`, `WORKER`. Not allowed: `LENDER` (no app flow exists for it yet) or
+`SUPER-ADMIN` (web admin panel only) — both get the same 403 as any wrong-role account.
+
 **Body**
 ```json
 {
@@ -158,7 +162,10 @@ Returns the user's profile along with stats for all their active assigned projec
         "phone": "01712345678",
         "profile_photo": "http://127.0.0.1:8000/storage/profile_photo/photo.jpg",
         "role": "OWNER",
-        "status": 1
+        "status": 1,
+        "worker_level": null,
+        "supervisor": null,
+        "active_projects": [ { "id": 1, "name": "Downtown Tower" } ]
     },
     "stats": {
         "total_projects": 5,
@@ -167,6 +174,20 @@ Returns the user's profile along with stats for all their active assigned projec
     }
 }
 ```
+`worker_level` and `supervisor` are only ever set on WORKER accounts (via `POST /users/{id}/worker-profile`, below) —
+`null` for every other role. `active_projects` is populated for any role; `stats` is really only meaningful for
+OWNER but is returned regardless, unchanged from before.
+
+### Set Worker Profile (Owner)
+`POST /users/{id}/worker-profile` 🔒 — caller must be `OWNER`; `{id}` must be a WORKER. Sets the "Site Worker Level"
+and fixed "Assigned Supervisor" shown on the Worker Profile screen — distinct from a task's per-task supervisor.
+
+| Field | Type | Rules |
+|---|---|---|
+| `worker_level` | integer | optional, 1-10 |
+| `supervisor_id` | integer | optional, must have the SUPERVISOR role |
+
+**Response `200`** — `{ "message": "Worker profile updated successfully.", "data": { id, full_name, worker_level, supervisor } }`
 
 ---
 
@@ -573,13 +594,17 @@ The user must be assigned to the project.
     "data": [
         {
             "id": 1,
+            "task_code": "TSK-0001",
             "project_id": 1,
             "title": "Site Foundation Phase - Sector B",
             "is_critical_path": true,
+            "priority": "high",
+            "priority_label": "High",
             "deadline": "2026-10-24",
             "status": 1,
             "status_label": "Pending",
-            "assigned_to": null
+            "assigned_to": null,
+            "assigned_worker": null
         }
     ],
     "meta": { "current_page": 1, "last_page": 1, "per_page": 10, "total": 1, "from": 1, "to": 1 }
@@ -597,7 +622,11 @@ The user must be assigned to the project.
 | `title` | string | required, max:150 |
 | `description` | string | optional |
 | `is_critical_path` | boolean | optional |
+| `priority` | string | optional (default `medium`): `low`, `medium`, `high` |
+| `phase_label` | string | optional, max:100 — free text, e.g. `"Phase 2: Rough-in"` |
+| `safety_note` | string | optional — the highlighted safety callout on Task Detail |
 | `deadline` | date | optional (YYYY-MM-DD) |
+| `deadline_time` | string | optional, `H:i` (24-hour), e.g. `"17:00"` |
 
 **Response `201`**
 ```json
@@ -605,14 +634,22 @@ The user must be assigned to the project.
     "message": "Task created successfully.",
     "data": {
         "id": 1,
+        "task_code": "TSK-0001",
         "project": { "id": 1, "name": "Downtown Tower" },
         "title": "Site Foundation Phase - Sector B",
         "description": "Oversee the comprehensive excavation...",
         "is_critical_path": true,
+        "priority": "high",
+        "priority_label": "High",
+        "phase_label": "Phase 2: Rough-in",
         "deadline": "2026-10-24",
+        "deadline_time": "17:00:00",
         "status": 1,
         "status_label": "Pending",
         "assigned_to": null,
+        "assigned_worker": null,
+        "worker_assigned_by": null,
+        "worker_assigned_at": null,
         "assigned_at": null,
         "created_by": { "id": 2, "full_name": "rajdip Dimj" },
         "created_at": "2026-09-18 12:00:00",
@@ -672,6 +709,80 @@ Sets the task's `status` to `2` (Assigned) and stamps `assigned_at`. Fails with 
 the `SUPERVISOR` role.
 
 **Response `200`** — same shape as the task detail response.
+
+---
+
+### Assign Worker to Task
+`POST /tasks/{id}/assign-worker` 🔒
+
+Caller must be `OWNER` or `SUPERVISOR`. The worker must have the `WORKER` role **and** already be assigned to the
+task's project (`422` otherwise). Notifies the worker ("New Task Assigned") and logs to the project's Activity feed.
+
+**Body**
+```json
+{ "worker_id": 42 }
+```
+
+**Response `200`** — same shape as the task detail response, with `assigned_worker`, `worker_assigned_by` and
+`worker_assigned_at` filled in.
+**Response `403`** — caller isn't an OWNER or SUPERVISOR.
+**Response `422`** — target user isn't a WORKER, or isn't on this project.
+
+---
+
+### My Tasks (Worker)
+`GET /my-tasks` 🔒
+
+The authenticated worker's own task list, across every project they're on. Optional `status` (1-4, matching the task
+status codes above), `search` (matches title, task code, or project location), `per_page`. Sorted by deadline.
+
+**Response `200`**
+```json
+{
+    "data": [
+        {
+            "id": 11,
+            "task_code": "TSK-0011",
+            "title": "Electrical Wiring - Sector A",
+            "project": { "id": 1, "name": "North Tower Expansion" },
+            "priority": "high",
+            "priority_label": "High",
+            "status": 1,
+            "status_label": "Pending",
+            "deadline": "2026-11-01",
+            "assigned_by": "Sarah Jenkins"
+        }
+    ],
+    "meta": { "current_page": 1, "last_page": 1, "per_page": 10, "total": 1, "from": 1, "to": 1 }
+}
+```
+
+Task `status` codes: `1`=Pending, `2`=Assigned, `3`=In Progress, `4`=Completed, `5`=Submitted, `6`=Returned. The last
+two are set automatically by the Submission workflow below — submitting work moves the task to Submitted; a
+supervisor return, an owner rejection, or an owner revision-request all move it to Returned; an owner's final
+approval moves it to Completed.
+
+---
+
+### Task Attachments
+Files attached to a task (blueprints, reference photos) — shown on Task Detail's Attachments list.
+
+`POST /tasks/{id}/attachments` 🔒 — caller must be `OWNER` or `SUPERVISOR`. `multipart/form-data`: `file` (required,
+pdf/jpg/jpeg/png/doc/docx, max 10MB), `category` (optional free text, e.g. "Blueprint", "Reference").
+
+**Response `201`** — `{ "message": "Attachment uploaded successfully.", "data": { id, file_name, category, file_size, url } }`
+
+`DELETE /tasks/{id}/attachments/{attachmentId}` 🔒 — removes the file and its record.
+
+---
+
+### Start Task (Worker)
+`POST /tasks/{id}/start` 🔒 — caller must be the task's `assigned_worker_id`. Moves status from Pending/Assigned to
+**In Progress**.
+
+**Response `200`** — same shape as the task detail response.
+**Response `403`** — caller isn't the assigned worker.
+**Response `422`** — task isn't in a startable state (already In Progress or Completed).
 
 ---
 
@@ -967,6 +1078,17 @@ submission in either `pending` or `in_review`, so `start-review` is an optional 
 > (supervisor) are included so a submission exists to review — the Owner-side actions are list/detail and
 > approve/reject/request-revision.
 
+> **Two things from the Worker app's "Returned Task" screen are deliberately not built**, by decision, not oversight:
+> 1. **Structured corrections** — the screen shows a list of separate correction items (each with a category like
+>    "Documentation"/"Data Entry", its own title, description, and a per-item fix action, one of which replaces a
+>    specific old file). Feedback here is only the single `supervisor_comment` / `owner_comment` text field. Building
+>    the structured version would need a new `submission_corrections` table and would extend `return-to-worker`,
+>    `reject`, and `request-revision` to accept a `corrections[]` array.
+> 2. **Save Draft** — there's no way to save partial submission progress before finalizing it; every call to
+>    `POST /tasks/{task}/submissions` creates a real, immediately-visible submission. A real draft would need a
+>    draft state on `submissions` plus a save/finalize step, and finalizing (not saving) is what should trigger the
+>    supervisor/owner notifications.
+
 ### Start Review (Supervisor)
 `POST /submissions/{id}/start-review` 🔒 — caller must have the SUPERVISOR role; the submission must currently be
 `pending`. Moves it to `in_review`. `422` if it's already past `pending`.
@@ -1032,27 +1154,41 @@ task title), `per_page`.
 ### Submit Work
 `POST /tasks/{task}/submissions` 🔒 — `multipart/form-data` when attaching media.
 
+A worker calling this for their own task can omit `worker_id` — it's inferred from the logged-in user, and the task
+must actually be assigned to them (`403` otherwise). An owner/admin entering it on someone else's behalf must send
+`worker_id` explicitly, which skips that ownership check.
+
 | Field | Type | Rules |
 |---|---|---|
-| `worker_id` | integer | required, must be a user with the WORKER role |
+| `worker_id` | integer | required unless the caller is a WORKER submitting for themself; must be a user with the WORKER role |
 | `quantity` | number | optional, min:0 |
 | `unit` | string | optional, max:50 |
-| `worker_description` | string | optional |
-| `media` | array of files | optional, jpg/jpeg/png/webp/pdf, max 10MB each |
+| `worker_description` | string | optional, max:500 |
+| `media` | array of files | optional, jpg/jpeg/png/webp/pdf/mp4/mov/webm, max 50MB each |
 
 **Response `201`** — `{ "message": "Submission created successfully.", "data": { ...submission } }`
+**Response `403`** — a worker tried to submit for a task not assigned to them.
 
 ### Verify (Supervisor)
 `POST /submissions/{id}/verify` 🔒 — caller must have the SUPERVISOR role. Body: `{"supervisor_comment": "..."}`
-(required). Moves status to `pending_final_approval`.
+(required). Moves status to `pending_final_approval` and notifies the project's owners.
+
+### Return to Worker (Supervisor)
+`POST /submissions/{id}/return-to-worker` 🔒 — caller must have the SUPERVISOR role. Lets a supervisor send work
+back to the worker directly, without an owner's involvement — only allowed while the submission is still `pending`
+or `in_review` (`422` once it's been verified and forwarded). Body: `{"supervisor_comment": "..."}` (required).
+
+Sets the submission to `revision_requested`, the task to **Returned**, and notifies the worker ("Task Returned").
+
+**Response `200`** — same shape as the submission detail response.
 
 ### Final Approve / Reject / Request Revision (Owner)
-- `POST /submissions/{id}/approve` — body `{"comment": "..."}` optional.
-- `POST /submissions/{id}/reject` — body `{"comment": "..."}` **required**.
-- `POST /submissions/{id}/request-revision` — body `{"comment": "..."}` **required**.
+- `POST /submissions/{id}/approve` — body `{"comment": "..."}` optional. Task → **Completed**.
+- `POST /submissions/{id}/reject` — body `{"comment": "..."}` **required**. Task → **Returned**.
+- `POST /submissions/{id}/request-revision` — body `{"comment": "..."}` **required**. Task → **Returned**.
 
 Each returns `{ "message": "Submission updated successfully.", "data": { ...submission } }` with `owner_decision`
-filled in.
+filled in, and notifies the worker ("Submission Approved" / "Submission Rejected" / "Task Returned").
 
 ---
 
@@ -1204,18 +1340,33 @@ export; ask if you specifically need a PDF file (it would add a PDF-generation p
 
 ## Notifications
 
-There's no create endpoint — entries are written automatically for the project's OWNERs. `type` is one of
-`critical_alert`, `action_required`, `milestone`, `financial`, `task`.
+There's no general create endpoint — entries are written automatically by the actions below. `type` is one of
+`critical_alert`, `action_required`, `milestone`, `financial`, `task`, `system`.
+
+**To the project's OWNERs:**
 
 | Trigger | `type` |
 |---|---|
-| A worker submits work | `task` |
-| A supervisor verifies a submission | `action_required` |
+| A worker submits work | `task` ("New Submission Received") |
+| A supervisor verifies a submission | `action_required` ("Submission Ready for Final Approval") |
 | A material is marked delayed | `critical_alert` |
 | A milestone is completed | `milestone` |
 | A payment request is added | `financial` ("Payment Request Pending") |
 | A payment is approved | `financial` ("Invoice Approved") |
 | A payment is cleared | `financial` ("Payment Processed") |
+
+**To the worker directly:**
+
+| Trigger | `type` |
+|---|---|
+| A supervisor or owner assigns them a task | `task` ("New Task Assigned") |
+| A supervisor returns a submission, or an owner rejects/requests revision | `task` ("Task Returned") |
+| An owner approves a submission | `task` ("Submission Approved") |
+| An owner pays out an earning | `financial` ("Payment Released") |
+
+`system` (e.g. "System Maintenance") is a valid `type` for platform-wide announcements, but there's no sender
+endpoint for it — no screen in either app shows an admin composing one. Rows would need to be seeded directly (a
+future admin-panel feature); the feed and `?type=system` filter already support it once one exists.
 
 > `notifications_enabled` (from Settings) isn't enforced here — it would control an actual push notification, and
 > there's no push (APNs/FCM) integration in this app. Rows are always written; the feed always shows them.
@@ -1308,6 +1459,92 @@ same as `GET /me`.
 project. `pending_actions` merges up to 10 each of: materials marked `delayed`, tasks with no supervisor assigned yet,
 and payments awaiting approval — newest first, capped at 10 total. `recent_activity` is the 10 latest Activity Log
 entries across every active project. `project_overview` is up to 5 projects, most recently updated first.
+
+### Worker Dashboard
+`GET /worker-dashboard` 🔒 — the Worker home screen equivalent. `pending_tasks` counts tasks with status Pending or
+Assigned (not yet started); `submitted_tasks` counts status Submitted; `earnings` is the worker's currently Pending
+earnings total (matches the Earnings Overview screen's Pending card). `notifications` is the 5 most recent, same
+shape as `GET /notifications`.
+
+**Response `200`**
+```json
+{
+    "data": {
+        "user": { "id": 55, "first_name": "Lucas", "full_name": "Lucas Reyes", "profile_photo": null },
+        "stats": { "pending_tasks": 3, "submitted_tasks": 2, "earnings": 1250 },
+        "notifications": [
+            { "id": 1, "type": "task", "title": "Electrical Work Approved",
+              "body": "Your submission for Sector 4 wiring has been reviewed and approved.",
+              "is_read": false, "time_ago": "2 hours ago" }
+        ]
+    }
+}
+```
+
+---
+
+## Earnings (Worker — Earnings Overview, Payment History)
+
+A worker's own per-task wages — entirely separate from the Owner-side `payments` (contractor/vendor invoices).
+Status flow: `pending` → `approved` (Owner) → `processing` (worker withdraws) → `paid` (Owner marks the transfer
+complete, or pays directly from `approved`, skipping the withdraw step).
+
+> There's no screen showing how an entry gets created, so entries are added by the Owner (payroll-style), not
+> generated automatically from task/submission approval. Ask if you want it tied to submission approval instead.
+
+### My Earnings (Worker)
+`GET /my-earnings` 🔒 — optional `status`, `range` (`this_week`/`this_month`/`all_time`, filtered on when the entry
+was logged), `per_page`. `earned_at` is the work date (no time); `created_at` is when the entry was logged — use it
+for the exact time shown on Payment History (e.g. "Today, 10:30 AM") and for grouping by day.
+
+**Response `200`**
+```json
+{
+    "data": {
+        "summary": {
+            "pending": { "amount": 950, "count": 2 },
+            "approved": { "amount": 450, "count": 1 },
+            "paid_this_month": { "amount": 1200, "count": 1 },
+            "available_balance": 450
+        },
+        "earnings": [
+            { "id": 1, "title": "Electrical Wiring", "subtitle": "Sector B - Main Floor", "task_id": null,
+              "task_code": null, "amount": 450, "status": "approved", "status_label": "Approved",
+              "earned_at": "2026-10-24", "paid_at": null, "created_at": "2026-10-24 10:30:00" }
+        ],
+        "meta": { "current_page": 1, "last_page": 1, "per_page": 10, "total": 4, "from": 1, "to": 4 }
+    }
+}
+```
+`available_balance` is the same number as `summary.approved.amount` — what "Withdraw Funds" would move.
+
+### Withdraw (Worker)
+`POST /my-earnings/withdraw` 🔒 — moves every currently `approved` entry to `processing` (all at once, no partial
+withdrawal). `422` if nothing is approved.
+
+**Response `200`** — `{ "message": "Withdrawal requested successfully.", "data": { "amount": 450, "count": 1 } }`
+
+### Project Earnings (Owner)
+`GET /projects/{project}/earnings` 🔒 — payroll list for one project. Optional `status`, `worker_id`, `per_page`.
+Each row includes `worker`.
+
+### Create Earning (Owner)
+`POST /projects/{project}/earnings` 🔒 — caller must be `OWNER`.
+
+| Field | Type | Rules |
+|---|---|---|
+| `worker_id` | integer | required, must have the WORKER role |
+| `task_id` | integer | optional, must belong to the same project |
+| `title` | string | required, max:150 |
+| `subtitle` | string | optional, max:255 |
+| `amount` | number | required, min:0 |
+| `earned_at` | date | optional (default today) |
+
+**Response `201`** — `{ "message": "Earning created successfully.", "data": { ...earning, "worker": {...} } }`
+
+### Approve / Pay (Owner)
+- `POST /earnings/{id}/approve` — Pending → Approved.
+- `POST /earnings/{id}/pay` — → Paid (from Approved or Processing). Notifies the worker ("Payment Released").
 
 ---
 

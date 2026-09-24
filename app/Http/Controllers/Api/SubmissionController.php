@@ -89,19 +89,29 @@ class SubmissionController extends Controller
             return response()->json(['message' => 'Task not found or you do not have access.'], 404);
         }
 
+        $callerIsWorker = $request->user()->hasRole('WORKER');
+
         $request->validate([
-            'worker_id' => 'required|integer|exists:users,id',
+            'worker_id' => [$callerIsWorker ? 'nullable' : 'required', 'integer', 'exists:users,id'],
             'quantity' => 'nullable|numeric|min:0',
             'unit' => 'nullable|string|max:50',
-            'worker_description' => 'nullable|string',
+            'worker_description' => 'nullable|string|max:500',
             'media' => 'nullable|array',
-            'media.*' => 'file|mimes:jpg,jpeg,png,webp,pdf|max:10240',
+            'media.*' => 'file|mimes:jpg,jpeg,png,webp,pdf,mp4,mov,webm|max:51200',
         ]);
 
-        $worker = User::find($request->worker_id);
+        // A worker submitting for themself doesn't need to pass worker_id; anyone else
+        // (e.g. an owner entering it on a worker's behalf) must specify it explicitly.
+        $worker = $request->filled('worker_id') ? User::find($request->worker_id) : $request->user();
 
         if (! $worker->hasRole('WORKER')) {
             return response()->json(['message' => 'Selected user is not a worker.'], 422);
+        }
+
+        // A worker can only submit for a task actually assigned to them; an explicit
+        // worker_id (owner/admin entry) skips this check.
+        if ($callerIsWorker && ! $request->filled('worker_id') && $task->assigned_worker_id !== $worker->id) {
+            return response()->json(['message' => 'This task is not assigned to you.'], 403);
         }
 
         try {
@@ -124,6 +134,8 @@ class SubmissionController extends Controller
                     ]);
                 }
             }
+
+            $task->update(['status' => Task::STATUSES['submitted']]);
 
             ActivityLog::record($task->project_id, 'submission_created', 'Submission for "'.$task->title.'" received from '.$worker->full_name, $request->user()->id);
 
@@ -229,6 +241,61 @@ class SubmissionController extends Controller
     }
 
     /**
+     * Supervisor returns work directly to the worker — no owner involvement required.
+     * Only allowed while the submission is still Pending or In Review (i.e. before the
+     * supervisor has verified and forwarded it to the owner).
+     *
+     * POST /api/v1/submissions/{id}/return-to-worker
+     */
+    public function returnToWorker(Request $request, int $id): JsonResponse
+    {
+        $submission = $this->findAccessibleSubmission($request, $id);
+
+        if (! $submission) {
+            return response()->json(['message' => 'Submission not found or you do not have access.'], 404);
+        }
+
+        if (! $request->user()->hasRole('SUPERVISOR')) {
+            return response()->json(['message' => 'Only a supervisor can return a submission.'], 403);
+        }
+
+        if (! in_array($submission->status, [Submission::STATUSES['pending'], Submission::STATUSES['in_review']], true)) {
+            return response()->json(['message' => 'This submission has already moved past supervisor review.'], 422);
+        }
+
+        $request->validate([
+            'supervisor_comment' => 'required|string',
+        ]);
+
+        $submission->update([
+            'supervisor_id' => $request->user()->id,
+            'supervisor_comment' => $request->supervisor_comment,
+            'supervisor_reviewed_at' => now(),
+            'status' => Submission::STATUSES['revision_requested'],
+        ]);
+
+        $submission->task->update(['status' => Task::STATUSES['returned']]);
+
+        ActivityLog::record($submission->project_id, 'submission_returned', 'Submission for "'.$submission->task->title.'" returned to worker by supervisor', $request->user()->id);
+
+        if ($submission->worker_id) {
+            UserNotification::notifyUser(
+                $submission->worker_id,
+                $submission->project_id,
+                'task',
+                'Task Returned',
+                'Your submission for "'.$submission->task->title.'" needs changes: '.$request->supervisor_comment,
+                "/submissions/{$submission->id}"
+            );
+        }
+
+        return response()->json([
+            'message' => 'Submission returned to worker.',
+            'data' => $this->detailResource($submission->fresh()),
+        ]);
+    }
+
+    /**
      * Final approve (Owner action).
      *
      * POST /api/v1/submissions/{id}/approve
@@ -281,7 +348,23 @@ class SubmissionController extends Controller
             'reviewed_at' => now(),
         ]);
 
+        $taskStatus = match ($status) {
+            'approved' => Task::STATUSES['completed'],
+            default => Task::STATUSES['returned'], // rejected, revision_requested
+        };
+        $submission->task->update(['status' => $taskStatus]);
+
         ActivityLog::record($submission->project_id, $logType, 'Submission for "'.$submission->task->title.'" '.$logVerb, $request->user()->id);
+
+        if ($submission->worker_id) {
+            [$title, $body] = match ($status) {
+                'approved' => ['Submission Approved', 'Your submission for "'.$submission->task->title.'" has been approved.'],
+                'rejected' => ['Submission Rejected', 'Your submission for "'.$submission->task->title.'" was rejected. '.$request->comment],
+                default => ['Task Returned', 'Your submission for "'.$submission->task->title.'" needs changes: '.$request->comment],
+            };
+
+            UserNotification::notifyUser($submission->worker_id, $submission->project_id, 'task', $title, $body, "/submissions/{$submission->id}");
+        }
 
         return response()->json([
             'message' => 'Submission updated successfully.',

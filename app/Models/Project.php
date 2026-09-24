@@ -145,6 +145,11 @@ class Project extends Model
         return $this->hasMany(Payment::class);
     }
 
+    public function earnings(): HasMany
+    {
+        return $this->hasMany(Earning::class);
+    }
+
     public function scopeFilter($query, array $filters): void
     {
         $query->when($filters['name'] ?? null, fn ($q, $v) =>

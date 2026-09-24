@@ -15,8 +15,17 @@ use Illuminate\Validation\ValidationException;
 
 class AuthController extends Controller
 {
+    private const REGISTERABLE_ROLES = [
+        'owner' => 'OWNER',
+        'supervisor' => 'SUPERVISOR',
+        'worker' => 'WORKER',
+    ];
+
+    private const LOGINABLE_ROLES = ['OWNER', 'SUPERVISOR', 'WORKER'];
+
     /**
-     * Register a new user with the USER role.
+     * Register a new user. Defaults to OWNER when no role is sent, so existing callers
+     * (e.g. the owner app's registration screen) keep working unchanged.
      */
     public function register(Request $request): JsonResponse
     {
@@ -27,6 +36,7 @@ class AuthController extends Controller
             'email'        => ['required', 'email', 'max:255', 'unique:users,email'],
             'phone'        => ['nullable', 'string', 'max:20', $this->uniquePhoneRule()],
             'company_name' => ['nullable', 'string', 'max:255'],
+            'role'         => ['nullable', 'string', 'in:'.implode(',', array_keys(self::REGISTERABLE_ROLES))],
             'password'     => ['required', 'confirmed', Password::min(8)],
         ]);
 
@@ -37,7 +47,9 @@ class AuthController extends Controller
             [$firstName, $lastName] = array_pad(preg_split('/\s+/', trim($request->full_name), 2), 2, null);
         }
 
-        $user = DB::transaction(function () use ($request, $firstName, $lastName) {
+        $role = self::REGISTERABLE_ROLES[$request->input('role', 'owner')];
+
+        $user = DB::transaction(function () use ($request, $firstName, $lastName, $role) {
             $user = User::create([
                 'first_name' => $firstName,
                 'last_name'  => $lastName,
@@ -46,9 +58,9 @@ class AuthController extends Controller
                 'password'   => $request->password,
             ]);
 
-            $user->assignRole('OWNER');
+            $user->assignRole($role);
 
-            if ($request->filled('company_name')) {
+            if ($role === 'OWNER' && $request->filled('company_name')) {
                 $company = Company::create(['legal_name' => trim($request->company_name)]);
                 $user->update(['company_id' => $company->id]);
             }
@@ -66,7 +78,8 @@ class AuthController extends Controller
     }
 
     /**
-     * Login — only allows users with the USER role.
+     * Login — allows OWNER, SUPERVISOR and WORKER accounts. LENDER isn't allowed yet
+     * (no app flow exists for it), and SUPER-ADMIN never uses this mobile API.
      */
     public function login(Request $request): JsonResponse
     {
@@ -87,7 +100,7 @@ class AuthController extends Controller
             ]);
         }
 
-        if (! $user->hasRole('OWNER')) {
+        if (! $user->hasRole(self::LOGINABLE_ROLES)) {
             return response()->json([
                 'message' => 'Access denied. This login is for users only.',
             ], 403);
@@ -267,6 +280,12 @@ class AuthController extends Controller
                     : null,
                 'role'          => $user->getRoleNames()->first(),
                 'status'        => $user->status,
+                'worker_level'  => $user->worker_level,
+                'supervisor'    => $user->supervisor ? [
+                    'id' => $user->supervisor->id,
+                    'full_name' => $user->supervisor->full_name,
+                ] : null,
+                'active_projects' => $projects->map(fn ($p) => ['id' => $p->id, 'name' => $p->name])->values(),
             ],
             'stats' => [
                 'total_projects'   => $projects->count(),

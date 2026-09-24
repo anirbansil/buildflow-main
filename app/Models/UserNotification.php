@@ -7,7 +7,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class UserNotification extends Model
 {
-    public const TYPES = ['critical_alert', 'action_required', 'milestone', 'financial', 'task'];
+    public const TYPES = ['critical_alert', 'action_required', 'milestone', 'financial', 'task', 'system'];
 
     protected $fillable = [
         'user_id',
@@ -53,5 +53,20 @@ class UserNotification extends Model
                 'action_url' => $actionUrl,
             ]);
         }
+    }
+
+    /**
+     * Notify a single user directly.
+     */
+    public static function notifyUser(int $userId, ?int $projectId, string $type, string $title, ?string $body = null, ?string $actionUrl = null): self
+    {
+        return static::create([
+            'user_id' => $userId,
+            'project_id' => $projectId,
+            'type' => $type,
+            'title' => $title,
+            'body' => $body,
+            'action_url' => $actionUrl,
+        ]);
     }
 }

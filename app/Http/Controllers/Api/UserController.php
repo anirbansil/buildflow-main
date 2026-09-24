@@ -60,4 +60,51 @@ class UserController extends Controller
             ],
         ]);
     }
+
+    /**
+     * Set a worker's fixed supervisor and level (Owner Profile → Operational Details).
+     * Caller must be an OWNER. `supervisor_id` must have the SUPERVISOR role.
+     *
+     * POST /api/v1/users/{id}/worker-profile
+     */
+    public function updateWorkerProfile(Request $request, int $id): JsonResponse
+    {
+        if (! $request->user()->hasRole('OWNER')) {
+            return response()->json(['message' => 'Only an owner can update this.'], 403);
+        }
+
+        $worker = User::find($id);
+
+        if (! $worker || ! $worker->hasRole('WORKER')) {
+            return response()->json(['message' => 'Worker not found.'], 404);
+        }
+
+        $request->validate([
+            'supervisor_id' => 'nullable|integer|exists:users,id',
+            'worker_level' => 'nullable|integer|between:1,10',
+        ]);
+
+        if ($request->filled('supervisor_id')) {
+            $supervisor = User::find($request->supervisor_id);
+
+            if (! $supervisor->hasRole('SUPERVISOR')) {
+                return response()->json(['message' => 'Selected user is not a supervisor.'], 422);
+            }
+        }
+
+        $worker->update($request->only(['supervisor_id', 'worker_level']));
+
+        return response()->json([
+            'message' => 'Worker profile updated successfully.',
+            'data' => [
+                'id' => $worker->id,
+                'full_name' => $worker->full_name,
+                'worker_level' => $worker->worker_level,
+                'supervisor' => $worker->supervisor ? [
+                    'id' => $worker->supervisor->id,
+                    'full_name' => $worker->supervisor->full_name,
+                ] : null,
+            ],
+        ]);
+    }
 }

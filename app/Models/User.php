@@ -54,6 +54,8 @@ class User extends Authenticatable implements PasskeyUser
         'title',
         'experience_years',
         'performance_score',
+        'worker_level',
+        'supervisor_id',
         'company_id',
         'notifications_enabled',
         'language',
@@ -150,6 +152,14 @@ class User extends Authenticatable implements PasskeyUser
     public function company(): BelongsTo
     {
         return $this->belongsTo(Company::class);
+    }
+
+    /**
+     * The worker's fixed direct supervisor (distinct from a task's per-task assignee).
+     */
+    public function supervisor(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'supervisor_id');
     }
 
     /**

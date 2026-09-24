@@ -85,6 +85,21 @@
       "key": "notification_id",
       "value": "",
       "type": "string"
+    },
+    {
+      "key": "worker_id2",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "task_attachment_id",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "earning_id",
+      "value": "",
+      "type": "string"
     }
   ],
   "item": [
@@ -130,6 +145,77 @@
                   "    const json = pm.response.json();",
                   "    if (json.token) { pm.collectionVariables.set('token', json.token); }",
                   "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Register (Supervisor)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"full_name\": \"Sarah Jenkins\",\n  \"email\": \"sarah.jenkins@example.com\",\n  \"role\": \"supervisor\",\n  \"password\": \"password123\",\n  \"password_confirmation\": \"password123\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/register",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "register"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Register (Worker)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"full_name\": \"Lucas Reyes\",\n  \"email\": \"lucas.reyes@example.com\",\n  \"phone\": \"+1 (555) 019-8273\",\n  \"role\": \"worker\",\n  \"password\": \"password123\",\n  \"password_confirmation\": \"password123\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/register",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "register"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 201) { pm.collectionVariables.set('token', pm.response.json().token); }"
                 ]
               }
             }
@@ -322,6 +408,22 @@
               ]
             }
           }
+        },
+        {
+          "name": "Worker Dashboard",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/worker-dashboard",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "worker-dashboard"
+              ]
+            }
+          }
         }
       ]
     },
@@ -372,6 +474,38 @@
               }
             }
           ]
+        },
+        {
+          "name": "Set Worker Profile (Owner)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"worker_level\": 3,\n  \"supervisor_id\": \"{{supervisor_id}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/users/{{worker_id}}/worker-profile",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "users",
+                "{{worker_id}}",
+                "worker-profile"
+              ]
+            }
+          }
         }
       ]
     },
@@ -671,7 +805,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"title\": \"Site Foundation Phase - Sector B\",\n  \"description\": \"Oversee excavation and pouring for Sector B.\",\n  \"is_critical_path\": true,\n  \"deadline\": \"2026-10-24\"\n}",
+              "raw": "{\n  \"title\": \"Site Foundation Phase - Sector B\",\n  \"description\": \"Oversee excavation and pouring for Sector B.\",\n  \"is_critical_path\": true,\n  \"deadline\": \"2026-10-24\",\n  \"priority\": \"high\",\n  \"safety_note\": \"Mandatory LOTO procedures must be verified by the supervisor prior to execution.\",\n  \"phase_label\": \"Phase 2: Rough-in\",\n  \"deadline_time\": \"17:00\"\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -826,6 +960,141 @@
                 "tasks",
                 "{{task_id}}",
                 "assign-supervisor"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Assign Worker to Task",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/tasks/{{task_id}}/assign-worker",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "tasks",
+                "{{task_id}}",
+                "assign-worker"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"worker_id\": \"{{worker_id}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "My Tasks (Worker)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/my-tasks?per_page=10",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "my-tasks"
+              ],
+              "query": [
+                {
+                  "key": "per_page",
+                  "value": "10"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Upload Task Attachment",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "file",
+                  "type": "file",
+                  "src": []
+                },
+                {
+                  "key": "category",
+                  "value": "Blueprint",
+                  "type": "text"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{base_url}}/tasks/{{task_id}}/attachments",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "tasks",
+                "{{task_id}}",
+                "attachments"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 201) { pm.collectionVariables.set('task_attachment_id', pm.response.json().data.id); }"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Delete Task Attachment",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/tasks/{{task_id}}/attachments/{{task_attachment_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "tasks",
+                "{{task_id}}",
+                "attachments",
+                "{{task_attachment_id}}"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Start Task (Worker)",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/tasks/{{task_id}}/start",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "tasks",
+                "{{task_id}}",
+                "start"
               ]
             }
           }
@@ -1328,7 +1597,7 @@
                   "key": "worker_id",
                   "value": "{{worker_id}}",
                   "type": "text",
-                  "description": "must be a user with the WORKER role"
+                  "description": "Optional if logged in AS the worker (auto-detected); required if an owner/admin is entering it on a worker's behalf."
                 },
                 {
                   "key": "quantity",
@@ -1348,7 +1617,8 @@
                 {
                   "key": "media[]",
                   "type": "file",
-                  "src": []
+                  "src": [],
+                  "description": "jpg/jpeg/png/webp/pdf/mp4/mov/webm, max 50MB"
                 }
               ]
             },
@@ -1473,6 +1743,38 @@
                   "language": "json"
                 }
               }
+            }
+          }
+        },
+        {
+          "name": "Return to Worker (Supervisor)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"supervisor_comment\": \"Photos for NE quadrant are blurry. Please re-shoot and resubmit.\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/submissions/{{submission_id}}/return-to-worker",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "submissions",
+                "{{submission_id}}",
+                "return-to-worker"
+              ]
             }
           }
         },
@@ -1913,6 +2215,164 @@
               "path": [
                 "notifications",
                 "read-all"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Earnings",
+      "item": [
+        {
+          "name": "Create Earning (Owner)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/projects/{{project_id}}/earnings",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "projects",
+                "{{project_id}}",
+                "earnings"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"worker_id\": \"{{worker_id}}\",\n  \"title\": \"Electrical Wiring\",\n  \"subtitle\": \"Sector B - Main Floor\",\n  \"amount\": 450,\n  \"earned_at\": \"2026-10-24\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 201) { pm.collectionVariables.set('earning_id', pm.response.json().data.id); }"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Project Earnings List (Owner)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/projects/{{project_id}}/earnings?per_page=10",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "projects",
+                "{{project_id}}",
+                "earnings"
+              ],
+              "query": [
+                {
+                  "key": "per_page",
+                  "value": "10"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Approve Earning (Owner)",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/earnings/{{earning_id}}/approve",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "earnings",
+                "{{earning_id}}",
+                "approve"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Pay Earning (Owner)",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/earnings/{{earning_id}}/pay",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "earnings",
+                "{{earning_id}}",
+                "pay"
+              ]
+            }
+          }
+        },
+        {
+          "name": "My Earnings (Worker)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/my-earnings?per_page=10",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "my-earnings"
+              ],
+              "query": [
+                {
+                  "key": "per_page",
+                  "value": "10"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 200) { const j = pm.response.json(); if (j.data.earnings.length) { pm.collectionVariables.set('earning_id', j.data.earnings[0].id); } }"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Withdraw (Worker)",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/my-earnings/withdraw",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "my-earnings",
+                "withdraw"
               ]
             }
           }

@@ -3,6 +3,7 @@
 use App\Http\Controllers\Api\ActivityController;
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\DashboardController;
+use App\Http\Controllers\Api\EarningController;
 use App\Http\Controllers\Api\CompanyController;
 use App\Http\Controllers\Api\ComplianceDocumentController;
 use App\Http\Controllers\Api\MaterialController;
@@ -30,11 +31,13 @@ Route::prefix('v1')->group(function () {
 
         Route::get('/me',              [AuthController::class, 'me']);
         Route::get('/dashboard',       [DashboardController::class, 'index']);
+        Route::get('/worker-dashboard', [DashboardController::class, 'worker']);
         Route::post('/logout',         [AuthController::class, 'logout']);
         Route::post('/profile/update', [AuthController::class, 'updateProfile']);
 
         // Users
         Route::get('/users', [UserController::class, 'index']);
+        Route::post('/users/{id}/worker-profile', [UserController::class, 'updateWorkerProfile']);
 
         // Project
         Route::get('/projects',                  [ProjectController::class, 'index']);
@@ -51,6 +54,11 @@ Route::prefix('v1')->group(function () {
         Route::get('/tasks/{id}',                          [TaskController::class, 'show']);
         Route::get('/tasks/{id}/available-supervisors',    [TaskController::class, 'availableSupervisors']);
         Route::post('/tasks/{id}/assign-supervisor',       [TaskController::class, 'assignSupervisor']);
+        Route::post('/tasks/{id}/assign-worker',           [TaskController::class, 'assignWorker']);
+        Route::get('/my-tasks', [TaskController::class, 'myTasks']);
+        Route::post('/tasks/{id}/attachments', [TaskController::class, 'uploadAttachment']);
+        Route::delete('/tasks/{id}/attachments/{attachmentId}', [TaskController::class, 'deleteAttachment']);
+        Route::post('/tasks/{id}/start', [TaskController::class, 'startTask']);
 
         // Materials
         Route::get('/projects/{project}/materials',  [MaterialController::class, 'index']);
@@ -71,6 +79,7 @@ Route::prefix('v1')->group(function () {
         Route::post('/tasks/{task}/submissions',            [SubmissionController::class, 'store']);
         Route::post('/submissions/{id}/start-review',         [SubmissionController::class, 'startReview']);
         Route::post('/submissions/{id}/verify',              [SubmissionController::class, 'verify']);
+        Route::post('/submissions/{id}/return-to-worker',    [SubmissionController::class, 'returnToWorker']);
         Route::post('/submissions/{id}/approve',             [SubmissionController::class, 'approve']);
         Route::post('/submissions/{id}/reject',               [SubmissionController::class, 'reject']);
         Route::post('/submissions/{id}/request-revision',    [SubmissionController::class, 'requestRevision']);
@@ -88,6 +97,14 @@ Route::prefix('v1')->group(function () {
         // Reports
         Route::get('/projects/{project}/reports/project', [ReportController::class, 'project']);
         Route::get('/reports/budget',                      [ReportController::class, 'budget']);
+
+        // Earnings
+        Route::get('/my-earnings', [EarningController::class, 'myEarnings']);
+        Route::post('/my-earnings/withdraw', [EarningController::class, 'withdraw']);
+        Route::get('/projects/{project}/earnings', [EarningController::class, 'indexForProject']);
+        Route::post('/projects/{project}/earnings', [EarningController::class, 'store']);
+        Route::post('/earnings/{id}/approve', [EarningController::class, 'approve']);
+        Route::post('/earnings/{id}/pay', [EarningController::class, 'pay']);
 
         // Notifications
         Route::get('/notifications',               [NotificationController::class, 'index']);

@@ -7,19 +7,14 @@ use App\Models\ActivityLog;
 use App\Models\Project;
 use App\Models\Task;
 use App\Models\User;
+use App\Models\UserNotification;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Storage;
 
 class TaskController extends Controller
 {
-    private const STATUS_LABELS = [
-        1 => 'Pending',
-        2 => 'Assigned',
-        3 => 'In Progress',
-        4 => 'Completed',
-    ];
-
     /**
      * List tasks for a project.
      * The authenticated user must be assigned to the project.
@@ -69,8 +64,12 @@ class TaskController extends Controller
         $request->validate([
             'title' => 'required|string|max:150',
             'description' => 'nullable|string',
+            'safety_note' => 'nullable|string',
             'is_critical_path' => 'nullable|boolean',
+            'priority' => 'nullable|string|in:'.implode(',', array_keys(Task::PRIORITIES)),
+            'phase_label' => 'nullable|string|max:100',
             'deadline' => 'nullable|date',
+            'deadline_time' => 'nullable|date_format:H:i',
         ]);
 
         try {
@@ -78,8 +77,12 @@ class TaskController extends Controller
                 'project_id' => $project->id,
                 'title' => $request->title,
                 'description' => $request->description,
+                'safety_note' => $request->safety_note,
                 'is_critical_path' => $request->boolean('is_critical_path'),
+                'priority' => Task::PRIORITIES[$request->input('priority', 'medium')],
+                'phase_label' => $request->phase_label,
                 'deadline' => $request->deadline,
+                'deadline_time' => $request->deadline_time,
                 'status' => 1,
                 'created_by' => $request->user()->id,
             ]);
@@ -206,9 +209,238 @@ class TaskController extends Controller
         }
     }
 
+    /**
+     * Assign a task directly to a worker. Caller must be an OWNER or SUPERVISOR, and the
+     * worker must already be assigned to the task's project.
+     *
+     * POST /api/v1/tasks/{id}/assign-worker
+     */
+    public function assignWorker(Request $request, int $id): JsonResponse
+    {
+        $task = $this->findAccessibleTask($request, $id);
+
+        if (! $task) {
+            return response()->json(['message' => 'Task not found or you do not have access.'], 404);
+        }
+
+        if (! $request->user()->hasRole(['OWNER', 'SUPERVISOR'])) {
+            return response()->json(['message' => 'Only an owner or supervisor can assign a worker.'], 403);
+        }
+
+        $request->validate([
+            'worker_id' => 'required|integer|exists:users,id',
+        ]);
+
+        $worker = User::find($request->worker_id);
+
+        if (! $worker->hasRole('WORKER')) {
+            return response()->json(['message' => 'Selected user is not a worker.'], 422);
+        }
+
+        $onProject = $task->project->users()->where('users.id', $worker->id)->exists();
+
+        if (! $onProject) {
+            return response()->json(['message' => 'This worker is not assigned to the task\'s project.'], 422);
+        }
+
+        try {
+            $task->update([
+                'assigned_worker_id' => $worker->id,
+                'worker_assigned_by' => $request->user()->id,
+                'worker_assigned_at' => now(),
+            ]);
+
+            ActivityLog::record(
+                $task->project_id,
+                'task_worker_assigned',
+                $worker->full_name.' assigned to task "'.$task->title.'"',
+                $request->user()->id
+            );
+
+            UserNotification::notifyUser(
+                $worker->id,
+                $task->project_id,
+                'task',
+                'New Task Assigned',
+                'You have been assigned to "'.$task->title.'". Please review the details.',
+                "/tasks/{$task->id}"
+            );
+
+            return response()->json([
+                'message' => 'Worker assigned successfully.',
+                'data' => $this->detailResource($task->fresh()),
+            ]);
+
+        } catch (\Exception $e) {
+            Log::error('API assign worker: '.$e->getMessage());
+
+            return response()->json(['message' => 'Server error.'], 500);
+        }
+    }
+
+    /**
+     * The authenticated worker's own task list, across every project. Search matches
+     * title, task_code or the project's location.
+     *
+     * GET /api/v1/my-tasks
+     */
+    public function myTasks(Request $request): JsonResponse
+    {
+        $request->validate([
+            'status' => 'nullable|integer|between:1,6',
+            'search' => 'nullable|string|max:255',
+        ]);
+
+        $tasks = Task::where('assigned_worker_id', $request->user()->id)
+            ->with(['project', 'workerAssignedBy'])
+            ->when($request->filled('status'), fn ($q) => $q->where('status', $request->integer('status')))
+            ->when($request->filled('search'), function ($q) use ($request) {
+                $term = '%'.trim($request->search).'%';
+                $q->where(fn ($q2) => $q2->where('title', 'like', $term)
+                    ->orWhere('task_code', 'like', $term)
+                    ->orWhereHas('project', fn ($p) => $p->where('location', 'like', $term)));
+            })
+            ->orderBy('deadline', 'asc')
+            ->orderBy('id', 'desc')
+            ->paginate($request->integer('per_page', 10));
+
+        return response()->json([
+            'data' => $tasks->map(fn ($task) => $this->myTaskResource($task)),
+            'meta' => [
+                'current_page' => $tasks->currentPage(),
+                'last_page' => $tasks->lastPage(),
+                'per_page' => $tasks->perPage(),
+                'total' => $tasks->total(),
+                'from' => $tasks->firstItem(),
+                'to' => $tasks->lastItem(),
+            ],
+        ]);
+    }
+
+    /**
+     * Attach a file (blueprint, reference photo, etc.) to a task. Caller must be an
+     * OWNER or SUPERVISOR. Send as multipart/form-data.
+     *
+     * POST /api/v1/tasks/{id}/attachments
+     */
+    public function uploadAttachment(Request $request, int $id): JsonResponse
+    {
+        $task = $this->findAccessibleTask($request, $id);
+
+        if (! $task) {
+            return response()->json(['message' => 'Task not found or you do not have access.'], 404);
+        }
+
+        if (! $request->user()->hasRole(['OWNER', 'SUPERVISOR'])) {
+            return response()->json(['message' => 'Only an owner or supervisor can add attachments.'], 403);
+        }
+
+        $request->validate([
+            'file' => 'required|file|mimes:pdf,jpg,jpeg,png,doc,docx|max:10240',
+            'category' => 'nullable|string|max:100',
+        ]);
+
+        $file = $request->file('file');
+        $path = $file->store("task_attachments/{$task->id}", 'public');
+
+        $attachment = $task->attachments()->create([
+            'uploaded_by' => $request->user()->id,
+            'file_path' => $path,
+            'file_name' => $file->getClientOriginalName(),
+            'category' => $request->category,
+            'file_size' => $file->getSize(),
+        ]);
+
+        return response()->json([
+            'message' => 'Attachment uploaded successfully.',
+            'data' => [
+                'id' => $attachment->id,
+                'file_name' => $attachment->file_name,
+                'category' => $attachment->category,
+                'file_size' => $attachment->file_size,
+                'url' => url('storage/'.$attachment->file_path),
+            ],
+        ], 201);
+    }
+
+    /**
+     * DELETE /api/v1/tasks/{id}/attachments/{attachmentId}
+     */
+    public function deleteAttachment(Request $request, int $id, int $attachmentId): JsonResponse
+    {
+        $task = $this->findAccessibleTask($request, $id);
+
+        if (! $task) {
+            return response()->json(['message' => 'Task not found or you do not have access.'], 404);
+        }
+
+        $attachment = $task->attachments()->find($attachmentId);
+
+        if (! $attachment) {
+            return response()->json(['message' => 'Attachment not found.'], 404);
+        }
+
+        if (Storage::disk('public')->exists($attachment->file_path)) {
+            Storage::disk('public')->delete($attachment->file_path);
+        }
+        $attachment->delete();
+
+        return response()->json(['message' => 'Attachment deleted successfully.']);
+    }
+
+    /**
+     * Worker starts their assigned task (Pending/Assigned → In Progress). Caller must be
+     * the task's assigned_worker_id.
+     *
+     * POST /api/v1/tasks/{id}/start
+     */
+    public function startTask(Request $request, int $id): JsonResponse
+    {
+        $task = $this->findAccessibleTask($request, $id);
+
+        if (! $task) {
+            return response()->json(['message' => 'Task not found or you do not have access.'], 404);
+        }
+
+        if ($task->assigned_worker_id !== $request->user()->id) {
+            return response()->json(['message' => 'Only the assigned worker can start this task.'], 403);
+        }
+
+        if (! in_array($task->status, [1, 2], true)) {
+            return response()->json(['message' => 'Only a pending or assigned task can be started.'], 422);
+        }
+
+        $task->update(['status' => 3]);
+
+        ActivityLog::record($task->project_id, 'task_started', $request->user()->full_name.' started task "'.$task->title.'"', $request->user()->id);
+
+        return response()->json([
+            'message' => 'Task started successfully.',
+            'data' => $this->detailResource($task->fresh()),
+        ]);
+    }
+
     // -----------------------------------------------------------------------
     // Private helpers
     // -----------------------------------------------------------------------
+
+    private function myTaskResource(Task $task): array
+    {
+        return [
+            'id' => $task->id,
+            'task_code' => $task->task_code,
+            'title' => $task->title,
+            'project' => $task->project ? ['id' => $task->project->id, 'name' => $task->project->name] : null,
+            'priority' => array_search($task->priority, Task::PRIORITIES, true) ?: null,
+            'priority_label' => Task::PRIORITY_LABELS[$task->priority] ?? null,
+            'phase_label' => $task->phase_label,
+            'status' => $task->status,
+            'status_label' => Task::STATUS_LABELS[$task->status] ?? 'Unknown',
+            'deadline' => $task->deadline?->format('Y-m-d'),
+            'deadline_time' => $task->deadline_time,
+            'assigned_by' => $task->workerAssignedBy?->full_name,
+        ];
+    }
 
     private function findAccessibleProject(Request $request, int $projectId): ?Project
     {
@@ -238,40 +470,70 @@ class TaskController extends Controller
     {
         return [
             'id' => $task->id,
+            'task_code' => $task->task_code,
             'project_id' => $task->project_id,
             'title' => $task->title,
             'is_critical_path' => $task->is_critical_path,
+            'priority' => array_search($task->priority, Task::PRIORITIES, true) ?: null,
+            'priority_label' => Task::PRIORITY_LABELS[$task->priority] ?? null,
+            'phase_label' => $task->phase_label,
             'deadline' => $task->deadline?->format('Y-m-d'),
+            'deadline_time' => $task->deadline_time,
             'status' => $task->status,
-            'status_label' => self::STATUS_LABELS[$task->status] ?? 'Unknown',
+            'status_label' => Task::STATUS_LABELS[$task->status] ?? 'Unknown',
             'assigned_to' => $task->assignee ? [
                 'id' => $task->assignee->id,
                 'full_name' => $task->assignee->full_name,
+            ] : null,
+            'assigned_worker' => $task->worker ? [
+                'id' => $task->worker->id,
+                'full_name' => $task->worker->full_name,
             ] : null,
         ];
     }
 
     private function detailResource(Task $task): array
     {
-        $task->loadMissing('project', 'assignee', 'creator');
+        $task->loadMissing('project', 'assignee', 'creator', 'worker', 'workerAssignedBy', 'attachments');
 
         return [
             'id' => $task->id,
+            'task_code' => $task->task_code,
             'project' => [
                 'id' => $task->project->id,
                 'name' => $task->project->name,
             ],
             'title' => $task->title,
             'description' => $task->description,
+            'safety_note' => $task->safety_note,
             'is_critical_path' => $task->is_critical_path,
+            'priority' => array_search($task->priority, Task::PRIORITIES, true) ?: null,
+            'priority_label' => Task::PRIORITY_LABELS[$task->priority] ?? null,
+            'phase_label' => $task->phase_label,
             'deadline' => $task->deadline?->format('Y-m-d'),
+            'deadline_time' => $task->deadline_time,
             'status' => $task->status,
-            'status_label' => self::STATUS_LABELS[$task->status] ?? 'Unknown',
+            'status_label' => Task::STATUS_LABELS[$task->status] ?? 'Unknown',
             'assigned_to' => $task->assignee ? [
                 'id' => $task->assignee->id,
                 'full_name' => $task->assignee->full_name,
                 'email' => $task->assignee->email,
+                'profile_photo' => $task->assignee->profile_photo ? url('storage/'.$task->assignee->profile_photo) : null,
             ] : null,
+            'assigned_worker' => $task->worker ? [
+                'id' => $task->worker->id,
+                'full_name' => $task->worker->full_name,
+                'email' => $task->worker->email,
+            ] : null,
+            'worker_assigned_by' => $task->workerAssignedBy?->full_name,
+            'worker_assigned_at' => $task->worker_assigned_at?->toDateTimeString(),
+            'attachments' => $task->attachments->map(fn ($a) => [
+                'id' => $a->id,
+                'file_name' => $a->file_name,
+                'category' => $a->category,
+                'file_size' => $a->file_size,
+                'url' => url('storage/'.$a->file_path),
+            ]),
             'assigned_at' => $task->assigned_at?->toDateTimeString(),
             'created_by' => $task->creator ? [
                 'id' => $task->creator->id,
