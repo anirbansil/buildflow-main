@@ -18,7 +18,7 @@
   "variable": [
     {
       "key": "base_url",
-      "value": "http://127.0.0.1:8000/api/v1",
+      "value": "https://buildflow.ynexdigitalsolutions.com/api/v1",
       "type": "string"
     },
     {
@@ -476,6 +476,38 @@
           ]
         },
         {
+          "name": "List Workers",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/users?role=WORKER&per_page=100",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "users"
+              ],
+              "query": [
+                {
+                  "key": "name",
+                  "value": "",
+                  "disabled": true
+                },
+                {
+                  "key": "role",
+                  "value": "WORKER"
+                },
+                {
+                  "key": "per_page",
+                  "value": "100"
+                }
+              ]
+            },
+            "description": "All workers (role is case-insensitive: worker, Worker or WORKER). Use the id as worker_id for Assign Worker."
+          }
+        },
+        {
           "name": "Set Worker Profile (Owner)",
           "request": {
             "method": "POST",
@@ -609,7 +641,8 @@
               "path": [
                 "projects"
               ]
-            }
+            },
+            "description": "OWNER only. Supervisor and Worker tokens get 403 \"Access denied. This area is for owners only.\""
           },
           "event": [
             {
@@ -684,7 +717,8 @@
               "path": [
                 "projects"
               ]
-            }
+            },
+            "description": "OWNER only. Supervisor and Worker tokens get 403 \"Access denied. This area is for owners only.\""
           }
         },
         {
@@ -716,7 +750,8 @@
                 "{{project_id}}",
                 "update"
               ]
-            }
+            },
+            "description": "OWNER only. Supervisor and Worker tokens get 403 \"Access denied. This area is for owners only.\""
           }
         },
         {
@@ -748,7 +783,8 @@
                 "{{project_id}}",
                 "assign"
               ]
-            }
+            },
+            "description": "OWNER only. Supervisor and Worker tokens get 403 \"Access denied. This area is for owners only.\""
           }
         },
         {
@@ -766,7 +802,8 @@
                 "{{project_id}}",
                 "toggle-status"
               ]
-            }
+            },
+            "description": "OWNER only. Supervisor and Worker tokens get 403 \"Access denied. This area is for owners only.\""
           }
         },
         {
@@ -785,7 +822,8 @@
                 "images",
                 "{{image_id}}"
               ]
-            }
+            },
+            "description": "OWNER only. Supervisor and Worker tokens get 403 \"Access denied. This area is for owners only.\""
           }
         }
       ]
@@ -805,7 +843,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"title\": \"Site Foundation Phase - Sector B\",\n  \"description\": \"Oversee excavation and pouring for Sector B.\",\n  \"is_critical_path\": true,\n  \"deadline\": \"2026-10-24\",\n  \"priority\": \"high\",\n  \"safety_note\": \"Mandatory LOTO procedures must be verified by the supervisor prior to execution.\",\n  \"phase_label\": \"Phase 2: Rough-in\",\n  \"deadline_time\": \"17:00\"\n}",
+              "raw": "{\n  \"title\": \"Site Foundation Phase - Sector B\",\n  \"description\": \"Oversee excavation and pouring for Sector B.\",\n  \"is_critical_path\": true,\n  \"deadline\": \"2026-10-24\",\n  \"priority\": \"high\",\n  \"safety_note\": \"Mandatory LOTO procedures must be verified by the supervisor prior to execution.\",\n  \"phase_label\": \"Phase 2: Rough-in\",\n  \"deadline_time\": \"17:00\",\n  \"worker_id\": {{worker_id}}\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -822,7 +860,81 @@
                 "{{project_id}}",
                 "tasks"
               ]
+            },
+            "description": "OWNER or SUPERVISOR only, on a project they are assigned to. A Worker token gets 403.\n\nOptional worker_id assigns the task to a worker on the project right away (they get notified). Remove it to create the task unassigned."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "    const json = pm.response.json();",
+                  "    if (json.data && json.data.id) { pm.collectionVariables.set('task_id', json.data.id); }",
+                  "}"
+                ]
+              }
             }
+          ]
+        },
+        {
+          "name": "Create Task (with worker + attachments)",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "title",
+                  "value": "Electrical Wiring - Sector A",
+                  "type": "text"
+                },
+                {
+                  "key": "priority",
+                  "value": "high",
+                  "type": "text"
+                },
+                {
+                  "key": "deadline",
+                  "value": "2026-11-15",
+                  "type": "text"
+                },
+                {
+                  "key": "worker_id",
+                  "value": "{{worker_id}}",
+                  "type": "text"
+                },
+                {
+                  "key": "attachments[]",
+                  "type": "file",
+                  "src": []
+                },
+                {
+                  "key": "attachments[]",
+                  "type": "file",
+                  "src": []
+                },
+                {
+                  "key": "attachment_category",
+                  "value": "Blueprint",
+                  "type": "text"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{base_url}}/projects/{{project_id}}/tasks",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "projects",
+                "{{project_id}}",
+                "tasks"
+              ]
+            },
+            "description": "OWNER or SUPERVISOR only. multipart/form-data: creates the task, assigns the worker and uploads up to 10 files in one call. Pick the files in each attachments[] row."
           },
           "event": [
             {
@@ -892,6 +1004,57 @@
                 "{{task_id}}"
               ]
             }
+          }
+        },
+        {
+          "name": "Edit Task",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Site Foundation Phase - Sector B (revised)\",\n  \"priority\": \"medium\",\n  \"deadline\": \"2026-10-30\",\n  \"deadline_time\": \"16:00\",\n  \"worker_id\": {{worker_id}}\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/tasks/{{task_id}}/update",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "tasks",
+                "{{task_id}}",
+                "update"
+              ]
+            },
+            "description": "OWNER or SUPERVISOR only. Send only the fields to change. worker_id reassigns the worker; send it as null to unassign. To add files, switch to form-data and add attachments[] rows."
+          }
+        },
+        {
+          "name": "Delete Task",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/tasks/{{task_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "tasks",
+                "{{task_id}}"
+              ]
+            },
+            "description": "OWNER or SUPERVISOR only. Deletes the task and its attachment files. Returns 422 if the task already has work submissions."
           }
         },
         {
@@ -1011,11 +1174,24 @@
               ],
               "query": [
                 {
+                  "key": "status",
+                  "value": "1",
+                  "description": "1-6, see Task statuses",
+                  "disabled": true
+                },
+                {
+                  "key": "search",
+                  "value": "",
+                  "description": "Task title, task code or project location",
+                  "disabled": true
+                },
+                {
                   "key": "per_page",
                   "value": "10"
                 }
               ]
-            }
+            },
+            "description": "Returns only tasks assigned to the logged-in user as worker (assign via Tasks > Assign Worker). Use a WORKER token; Owner and Supervisor tokens always get an empty list."
           }
         },
         {
@@ -1048,7 +1224,8 @@
                 "{{task_id}}",
                 "attachments"
               ]
-            }
+            },
+            "description": "OWNER or SUPERVISOR only. One file as `file` (pdf/jpg/jpeg/png/doc/docx, max 10MB). In Postman, set the row type to File and pick a file. If you get \"failed to upload\", the file is bigger than the server PHP upload_max_filesize."
           },
           "event": [
             {
@@ -1061,6 +1238,45 @@
               }
             }
           ]
+        },
+        {
+          "name": "Upload Multiple Task Attachments",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "files[]",
+                  "type": "file",
+                  "src": []
+                },
+                {
+                  "key": "files[]",
+                  "type": "file",
+                  "src": []
+                },
+                {
+                  "key": "category",
+                  "value": "Reference",
+                  "type": "text"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{base_url}}/tasks/{{task_id}}/attachments",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "tasks",
+                "{{task_id}}",
+                "attachments"
+              ]
+            },
+            "description": "OWNER or SUPERVISOR only. Up to 10 files as files[] (pdf/jpg/jpeg/png/doc/docx, max 10MB each). Returns data as an array."
+          }
         },
         {
           "name": "Delete Task Attachment",

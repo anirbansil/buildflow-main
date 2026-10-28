@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\ActivityLog;
 use App\Models\Project;
 use App\Models\Task;
+use App\Models\TaskAttachment;
 use App\Models\User;
 use App\Models\UserNotification;
 use Illuminate\Http\JsonResponse;
@@ -15,6 +16,10 @@ use Illuminate\Support\Facades\Storage;
 
 class TaskController extends Controller
 {
+    private const ATTACHMENT_RULE = 'file|mimes:pdf,jpg,jpeg,png,doc,docx|max:10240';
+
+    private const MAX_ATTACHMENTS = 10;
+
     /**
      * List tasks for a project.
      * The authenticated user must be assigned to the project.
@@ -61,6 +66,10 @@ class TaskController extends Controller
             return response()->json(['message' => 'Project not found or you do not have access.'], 404);
         }
 
+        if (! $request->user()->hasRole(['OWNER', 'SUPERVISOR'])) {
+            return response()->json(['message' => 'Only an owner or supervisor can create tasks.'], 403);
+        }
+
         $request->validate([
             'title' => 'required|string|max:150',
             'description' => 'nullable|string',
@@ -70,7 +79,17 @@ class TaskController extends Controller
             'phase_label' => 'nullable|string|max:100',
             'deadline' => 'nullable|date',
             'deadline_time' => 'nullable|date_format:H:i',
-        ]);
+            'worker_id' => 'nullable|integer|exists:users,id',
+            'attachments' => 'nullable|array|max:'.self::MAX_ATTACHMENTS,
+            'attachments.*' => self::ATTACHMENT_RULE,
+            'attachment_category' => 'nullable|string|max:100',
+        ], $this->uploadMessages());
+
+        $worker = $request->filled('worker_id') ? User::find($request->worker_id) : null;
+
+        if ($worker && ($error = $this->workerAssignmentError($project, $worker))) {
+            return response()->json(['message' => $error], 422);
+        }
 
         try {
             $task = Task::create([
@@ -89,13 +108,143 @@ class TaskController extends Controller
 
             ActivityLog::record($project->id, 'task_created', 'Task "'.$task->title.'" created', $request->user()->id);
 
+            if ($worker) {
+                $this->assignWorkerToTask($task, $worker, $request->user());
+            }
+
+            if ($request->hasFile('attachments')) {
+                $this->storeAttachments($task, $request->file('attachments'), $request->attachment_category, $request->user()->id);
+            }
+
             return response()->json([
                 'message' => 'Task created successfully.',
-                'data' => $this->detailResource($task),
+                'data' => $this->detailResource($task->fresh()),
             ], 201);
 
-        } catch (\Exception $e) {
+        } catch (\Throwable $e) {
             Log::error('API create task: '.$e->getMessage());
+
+            return response()->json(['message' => 'Server error.'], 500);
+        }
+    }
+
+    /**
+     * Edit a task. Caller must be an OWNER or SUPERVISOR on the task's project. Send only
+     * the fields to change. `worker_id` assigns or reassigns the worker; send it as null
+     * to unassign. New files in `attachments[]` are added to the existing ones.
+     *
+     * POST /api/v1/tasks/{id}/update
+     */
+    public function update(Request $request, int $id): JsonResponse
+    {
+        $task = $this->findAccessibleTask($request, $id);
+
+        if (! $task) {
+            return response()->json(['message' => 'Task not found or you do not have access.'], 404);
+        }
+
+        if (! $request->user()->hasRole(['OWNER', 'SUPERVISOR'])) {
+            return response()->json(['message' => 'Only an owner or supervisor can edit tasks.'], 403);
+        }
+
+        $request->validate([
+            'title' => 'sometimes|required|string|max:150',
+            'description' => 'nullable|string',
+            'safety_note' => 'nullable|string',
+            'is_critical_path' => 'nullable|boolean',
+            'priority' => 'nullable|string|in:'.implode(',', array_keys(Task::PRIORITIES)),
+            'phase_label' => 'nullable|string|max:100',
+            'deadline' => 'nullable|date',
+            'deadline_time' => 'nullable|date_format:H:i',
+            'worker_id' => 'nullable|integer|exists:users,id',
+            'attachments' => 'nullable|array|max:'.self::MAX_ATTACHMENTS,
+            'attachments.*' => self::ATTACHMENT_RULE,
+            'attachment_category' => 'nullable|string|max:100',
+        ], $this->uploadMessages());
+
+        $worker = $request->filled('worker_id') ? User::find($request->worker_id) : null;
+
+        if ($worker && ($error = $this->workerAssignmentError($task->project, $worker))) {
+            return response()->json(['message' => $error], 422);
+        }
+
+        try {
+            $fields = $request->only(['title', 'description', 'safety_note', 'phase_label', 'deadline', 'deadline_time']);
+
+            if ($request->has('is_critical_path')) {
+                $fields['is_critical_path'] = $request->boolean('is_critical_path');
+            }
+
+            if ($request->filled('priority')) {
+                $fields['priority'] = Task::PRIORITIES[$request->priority];
+            }
+
+            $task->update($fields);
+
+            if ($task->wasChanged()) {
+                ActivityLog::record($task->project_id, 'task_updated', 'Task "'.$task->title.'" updated', $request->user()->id);
+            }
+
+            if ($worker && $worker->id !== $task->assigned_worker_id) {
+                $this->assignWorkerToTask($task, $worker, $request->user());
+            } elseif ($request->has('worker_id') && ! $request->filled('worker_id') && $task->assigned_worker_id) {
+                $task->update(['assigned_worker_id' => null, 'worker_assigned_by' => null, 'worker_assigned_at' => null]);
+
+                ActivityLog::record($task->project_id, 'task_worker_unassigned', 'Worker removed from task "'.$task->title.'"', $request->user()->id);
+            }
+
+            if ($request->hasFile('attachments')) {
+                $this->storeAttachments($task, $request->file('attachments'), $request->attachment_category, $request->user()->id);
+            }
+
+            return response()->json([
+                'message' => 'Task updated successfully.',
+                'data' => $this->detailResource($task->fresh()),
+            ]);
+
+        } catch (\Throwable $e) {
+            Log::error('API update task: '.$e->getMessage());
+
+            return response()->json(['message' => 'Server error.'], 500);
+        }
+    }
+
+    /**
+     * Delete a task and its attachment files. Caller must be an OWNER or SUPERVISOR on the
+     * task's project. A task that already has work submissions can't be deleted, so the
+     * review and earnings history isn't lost.
+     *
+     * DELETE /api/v1/tasks/{id}
+     */
+    public function destroy(Request $request, int $id): JsonResponse
+    {
+        $task = $this->findAccessibleTask($request, $id);
+
+        if (! $task) {
+            return response()->json(['message' => 'Task not found or you do not have access.'], 404);
+        }
+
+        if (! $request->user()->hasRole(['OWNER', 'SUPERVISOR'])) {
+            return response()->json(['message' => 'Only an owner or supervisor can delete tasks.'], 403);
+        }
+
+        if ($task->submissions()->exists()) {
+            return response()->json(['message' => 'This task already has work submissions and can\'t be deleted.'], 422);
+        }
+
+        try {
+            $paths = $task->attachments()->pluck('file_path')->all();
+
+            $task->delete();
+
+            Storage::disk('public')->delete($paths);
+
+            ActivityLog::record($task->project_id, 'task_deleted', 'Task "'.$task->title.'" deleted', $request->user()->id);
+
+            return response()->json(['message' => 'Task deleted successfully.']);
+
+        } catch (\Throwable $e) {
+            Log::error('API delete task: '.$e->getMessage());
 
             return response()->json(['message' => 'Server error.'], 500);
         }
@@ -233,38 +382,12 @@ class TaskController extends Controller
 
         $worker = User::find($request->worker_id);
 
-        if (! $worker->hasRole('WORKER')) {
-            return response()->json(['message' => 'Selected user is not a worker.'], 422);
-        }
-
-        $onProject = $task->project->users()->where('users.id', $worker->id)->exists();
-
-        if (! $onProject) {
-            return response()->json(['message' => 'This worker is not assigned to the task\'s project.'], 422);
+        if ($error = $this->workerAssignmentError($task->project, $worker)) {
+            return response()->json(['message' => $error], 422);
         }
 
         try {
-            $task->update([
-                'assigned_worker_id' => $worker->id,
-                'worker_assigned_by' => $request->user()->id,
-                'worker_assigned_at' => now(),
-            ]);
-
-            ActivityLog::record(
-                $task->project_id,
-                'task_worker_assigned',
-                $worker->full_name.' assigned to task "'.$task->title.'"',
-                $request->user()->id
-            );
-
-            UserNotification::notifyUser(
-                $worker->id,
-                $task->project_id,
-                'task',
-                'New Task Assigned',
-                'You have been assigned to "'.$task->title.'". Please review the details.',
-                "/tasks/{$task->id}"
-            );
+            $this->assignWorkerToTask($task, $worker, $request->user());
 
             return response()->json([
                 'message' => 'Worker assigned successfully.',
@@ -318,8 +441,9 @@ class TaskController extends Controller
     }
 
     /**
-     * Attach a file (blueprint, reference photo, etc.) to a task. Caller must be an
-     * OWNER or SUPERVISOR. Send as multipart/form-data.
+     * Attach files (blueprint, reference photo, etc.) to a task. Caller must be an
+     * OWNER or SUPERVISOR. Send as multipart/form-data, either one file as `file`
+     * (returns one object) or several as `files[]` (returns an array).
      *
      * POST /api/v1/tasks/{id}/attachments
      */
@@ -336,31 +460,30 @@ class TaskController extends Controller
         }
 
         $request->validate([
-            'file' => 'required|file|mimes:pdf,jpg,jpeg,png,doc,docx|max:10240',
+            'file' => 'required_without:files|'.self::ATTACHMENT_RULE,
+            'files' => 'required_without:file|array|max:'.self::MAX_ATTACHMENTS,
+            'files.*' => self::ATTACHMENT_RULE,
             'category' => 'nullable|string|max:100',
-        ]);
+        ], $this->uploadMessages());
 
-        $file = $request->file('file');
-        $path = $file->store("task_attachments/{$task->id}", 'public');
+        $single = $request->hasFile('file');
+        $files = $single ? [$request->file('file')] : $request->file('files');
 
-        $attachment = $task->attachments()->create([
-            'uploaded_by' => $request->user()->id,
-            'file_path' => $path,
-            'file_name' => $file->getClientOriginalName(),
-            'category' => $request->category,
-            'file_size' => $file->getSize(),
-        ]);
+        try {
+            $attachments = $this->storeAttachments($task, $files, $request->category, $request->user()->id);
 
-        return response()->json([
-            'message' => 'Attachment uploaded successfully.',
-            'data' => [
-                'id' => $attachment->id,
-                'file_name' => $attachment->file_name,
-                'category' => $attachment->category,
-                'file_size' => $attachment->file_size,
-                'url' => url('storage/'.$attachment->file_path),
-            ],
-        ], 201);
+            return response()->json([
+                'message' => count($attachments) > 1 ? 'Attachments uploaded successfully.' : 'Attachment uploaded successfully.',
+                'data' => $single
+                    ? $this->attachmentResource($attachments[0])
+                    : array_map(fn ($a) => $this->attachmentResource($a), $attachments),
+            ], 201);
+
+        } catch (\Throwable $e) {
+            Log::error('API upload task attachment: '.$e->getMessage());
+
+            return response()->json(['message' => 'Server error. The file could not be saved.'], 500);
+        }
     }
 
     /**
@@ -372,6 +495,10 @@ class TaskController extends Controller
 
         if (! $task) {
             return response()->json(['message' => 'Task not found or you do not have access.'], 404);
+        }
+
+        if (! $request->user()->hasRole(['OWNER', 'SUPERVISOR'])) {
+            return response()->json(['message' => 'Only an owner or supervisor can delete attachments.'], 403);
         }
 
         $attachment = $task->attachments()->find($attachmentId);
@@ -423,6 +550,96 @@ class TaskController extends Controller
     // -----------------------------------------------------------------------
     // Private helpers
     // -----------------------------------------------------------------------
+
+    /**
+     * Why this user can't be given a task on the project, or null when they can.
+     */
+    private function workerAssignmentError(Project $project, User $worker): ?string
+    {
+        if (! $worker->hasRole('WORKER')) {
+            return 'Selected user is not a worker.';
+        }
+
+        if (! $project->users()->where('users.id', $worker->id)->exists()) {
+            return 'This worker is not assigned to the task\'s project.';
+        }
+
+        return null;
+    }
+
+    private function assignWorkerToTask(Task $task, User $worker, User $assignedBy): void
+    {
+        $task->update([
+            'assigned_worker_id' => $worker->id,
+            'worker_assigned_by' => $assignedBy->id,
+            'worker_assigned_at' => now(),
+        ]);
+
+        ActivityLog::record(
+            $task->project_id,
+            'task_worker_assigned',
+            $worker->full_name.' assigned to task "'.$task->title.'"',
+            $assignedBy->id
+        );
+
+        UserNotification::notifyUser(
+            $worker->id,
+            $task->project_id,
+            'task',
+            'New Task Assigned',
+            'You have been assigned to "'.$task->title.'". Please review the details.',
+            "/tasks/{$task->id}"
+        );
+    }
+
+    /**
+     * @param  \Illuminate\Http\UploadedFile[]  $files
+     * @return TaskAttachment[]
+     */
+    private function storeAttachments(Task $task, array $files, ?string $category, int $userId): array
+    {
+        $attachments = [];
+
+        foreach ($files as $file) {
+            $path = $file->store("task_attachments/{$task->id}", 'public');
+
+            if (! $path) {
+                throw new \RuntimeException("Could not write task attachment for task {$task->id}");
+            }
+
+            $attachments[] = $task->attachments()->create([
+                'uploaded_by' => $userId,
+                'file_path' => $path,
+                'file_name' => $file->getClientOriginalName(),
+                'category' => $category,
+                'file_size' => $file->getSize(),
+            ]);
+        }
+
+        return $attachments;
+    }
+
+    private function attachmentResource(TaskAttachment $attachment): array
+    {
+        return [
+            'id' => $attachment->id,
+            'file_name' => $attachment->file_name,
+            'category' => $attachment->category,
+            'file_size' => $attachment->file_size,
+            'url' => url('storage/'.$attachment->file_path),
+        ];
+    }
+
+    /**
+     * A file over PHP's upload_max_filesize never reaches Laravel, which only reports
+     * "failed to upload", so say what the real limit is.
+     */
+    private function uploadMessages(): array
+    {
+        return [
+            'uploaded' => 'The :attribute failed to upload. It is probably larger than the server limit of '.ini_get('upload_max_filesize').'.',
+        ];
+    }
 
     private function myTaskResource(Task $task): array
     {

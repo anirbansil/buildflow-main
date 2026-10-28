@@ -42,16 +42,20 @@ Route::prefix('v1')->group(function () {
         // Project
         Route::get('/projects',                  [ProjectController::class, 'index']);
         Route::get('/projects/{id}',             [ProjectController::class, 'show']);
-        Route::post('/projects',                 [ProjectController::class, 'store']);
-        Route::post('/projects/{id}/update',        [ProjectController::class, 'update']);
-        Route::post('/projects/{id}/assign',        [ProjectController::class, 'assign']);
-        Route::post('/projects/{id}/toggle-status', [ProjectController::class, 'toggleStatus']);
-        Route::delete('/projects/{id}/images/{imageId}', [ProjectController::class, 'deleteImage']);
+        Route::middleware('owner')->group(function () {
+            Route::post('/projects',                 [ProjectController::class, 'store']);
+            Route::post('/projects/{id}/update',        [ProjectController::class, 'update']);
+            Route::post('/projects/{id}/assign',        [ProjectController::class, 'assign']);
+            Route::post('/projects/{id}/toggle-status', [ProjectController::class, 'toggleStatus']);
+            Route::delete('/projects/{id}/images/{imageId}', [ProjectController::class, 'deleteImage']);
+        });
 
         // Tasks
         Route::get('/projects/{project}/tasks',  [TaskController::class, 'index']);
         Route::post('/projects/{project}/tasks', [TaskController::class, 'store']);
         Route::get('/tasks/{id}',                          [TaskController::class, 'show']);
+        Route::post('/tasks/{id}/update',                  [TaskController::class, 'update']);
+        Route::delete('/tasks/{id}',                       [TaskController::class, 'destroy']);
         Route::get('/tasks/{id}/available-supervisors',    [TaskController::class, 'availableSupervisors']);
         Route::post('/tasks/{id}/assign-supervisor',       [TaskController::class, 'assignSupervisor']);
         Route::post('/tasks/{id}/assign-worker',           [TaskController::class, 'assignWorker']);

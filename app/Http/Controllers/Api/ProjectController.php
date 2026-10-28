@@ -139,6 +139,9 @@ class ProjectController extends Controller
                 $project->users()->sync($request->assigned_users);
             }
 
+            // The creating owner must stay on the project, or they lose access to it
+            $project->users()->syncWithoutDetaching([$request->user()->id]);
+
             // Handle document/image uploads
             if ($request->hasFile('images')) {
                 $this->storeImages($project, $request);
@@ -165,7 +168,7 @@ class ProjectController extends Controller
      */
     public function update(Request $request, int $id): JsonResponse
     {
-        $project = Project::find($id);
+        $project = $this->findOwnedProject($request, $id);
 
         if (! $project) {
             return response()->json(['message' => 'Project not found.'], 404);
@@ -232,6 +235,7 @@ class ProjectController extends Controller
             // Sync assigned users if provided
             if ($request->has('assigned_users')) {
                 $project->users()->sync($request->assigned_users ?? []);
+                $project->users()->syncWithoutDetaching([$request->user()->id]);
             }
 
             // Delete removed images
@@ -271,7 +275,7 @@ class ProjectController extends Controller
      */
     public function deleteImage(Request $request, int $id, int $imageId): JsonResponse
     {
-        $project = Project::find($id);
+        $project = $this->findOwnedProject($request, $id);
 
         if (! $project) {
             return response()->json(['message' => 'Project not found.'], 404);
@@ -305,7 +309,7 @@ class ProjectController extends Controller
      */
     public function toggleStatus(Request $request, int $id): JsonResponse
     {
-        $project = Project::find($id);
+        $project = $this->findOwnedProject($request, $id);
 
         if (! $project) {
             return response()->json(['message' => 'Project not found.'], 404);
@@ -323,7 +327,7 @@ class ProjectController extends Controller
     }
     public function assign(Request $request, int $id): JsonResponse
     {
-        $project = Project::find($id);
+        $project = $this->findOwnedProject($request, $id);
 
         if (! $project) {
             return response()->json(['message' => 'Project not found.'], 404);
@@ -336,6 +340,7 @@ class ProjectController extends Controller
 
         try {
             $project->users()->sync($request->user_ids);
+            $project->users()->syncWithoutDetaching([$request->user()->id]);
             $project->loadCount('users');
 
             return response()->json([
@@ -360,6 +365,17 @@ class ProjectController extends Controller
     // -----------------------------------------------------------------------
     // Private helpers
     // -----------------------------------------------------------------------
+
+    /**
+     * A project the calling owner is assigned to, active or not.
+     */
+    private function findOwnedProject(Request $request, int $id): ?Project
+    {
+        return $request->user()
+            ->projects()
+            ->where('projects.id', $id)
+            ->first();
+    }
 
     private function storeImages(Project $project, Request $request): void
     {

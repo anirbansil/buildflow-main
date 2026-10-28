@@ -16,6 +16,10 @@ class UserController extends Controller
      */
     public function index(Request $request): JsonResponse
     {
+        if ($request->filled('role')) {
+            $request->merge(['role' => strtoupper(trim($request->role))]);
+        }
+
         $request->validate([
             'name'     => 'nullable|string|max:100',
             'role'     => 'nullable|string|in:OWNER,SUPERVISOR,WORKER',

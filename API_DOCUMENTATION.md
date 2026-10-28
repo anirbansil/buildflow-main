@@ -250,7 +250,7 @@ Use `multipart/form-data` if uploading a profile photo, otherwise `application/j
 | Param | Type | Description |
 |---|---|---|
 | `name` | string | Search by full name (partial match) |
-| `role` | string | Filter by role: `SUPER-ADMIN`, `OWNER`, `SUPERVISOR`, `WORKER`, `USER` |
+| `role` | string | Filter by role: `OWNER`, `SUPERVISOR`, `WORKER` (case-insensitive, so `worker` also works) |
 | `per_page` | integer | Items per page (default: 10, max: 100) |
 
 **Example**
@@ -289,6 +289,8 @@ GET /users?name=john&role=WORKER&per_page=15
 ---
 
 ## Projects
+
+Only an **OWNER** can create, update, assign, change the status of a project or delete its documents, and only on projects they are on. Other roles get `403 {"message": "Access denied. This area is for owners only."}`. The creating owner is always kept on the project, even when `assigned_users` / `user_ids` leaves them out. Listing and viewing projects is open to every role, limited to the projects they are assigned to (a supervisor sees only the projects an owner assigned them to).
 
 ### List Assigned Projects (Owner)
 `GET /projects` 🔒
@@ -616,6 +618,8 @@ The user must be assigned to the project.
 ### Create Task
 `POST /projects/{project}/tasks` 🔒
 
+**OWNER** or **SUPERVISOR** only, on any project they are assigned to. A WORKER gets `403 {"message": "Only an owner or supervisor can create tasks."}`.
+
 **Body**
 | Field | Type | Rules |
 |---|---|---|
@@ -627,6 +631,9 @@ The user must be assigned to the project.
 | `safety_note` | string | optional — the highlighted safety callout on Task Detail |
 | `deadline` | date | optional (YYYY-MM-DD) |
 | `deadline_time` | string | optional, `H:i` (24-hour), e.g. `"17:00"` |
+| `worker_id` | integer | optional — assigns the task to a worker straight away. Same rules and notification as [Assign Worker to Task](#assign-worker-to-task): must be a `WORKER` already on the project, otherwise `422` |
+| `attachments[]` | file[] | optional, up to 10 files, pdf/jpg/jpeg/png/doc/docx, max 10MB each. Send as `multipart/form-data` |
+| `attachment_category` | string | optional, max:100 — category for all files in `attachments[]`, e.g. `"Blueprint"` |
 
 **Response `201`**
 ```json
@@ -665,6 +672,30 @@ The user must be assigned to the project.
 
 **Response `200`** — same shape as the create response's `data`.
 **Response `404`** — task not found or you don't have access.
+
+---
+
+### Edit Task
+`POST /tasks/{id}/update` 🔒
+
+**OWNER** or **SUPERVISOR** only, on a project they are assigned to. Send only the fields to change. Accepts the same
+fields as [Create Task](#create-task). `worker_id` assigns or reassigns the worker (the new worker is notified); send
+`worker_id` empty to unassign. Files in `attachments[]` are added to the existing attachments. Status isn't edited
+here; it moves through the Start / Submission workflow.
+
+**Response `200`** — `{ "message": "Task updated successfully.", "data": { ...task detail } }`
+**Response `403`** — caller is a WORKER. **Response `422`** — validation error, or `worker_id` isn't a worker on this project.
+
+---
+
+### Delete Task
+`DELETE /tasks/{id}` 🔒
+
+**OWNER** or **SUPERVISOR** only. Deletes the task, its attachments and their files.
+
+**Response `200`** — `{ "message": "Task deleted successfully." }`
+**Response `403`** — caller is a WORKER.
+**Response `422`** — the task already has work submissions, so it can't be deleted (keeps the review and earnings history).
 
 ---
 
@@ -767,12 +798,21 @@ approval moves it to Completed.
 ### Task Attachments
 Files attached to a task (blueprints, reference photos) — shown on Task Detail's Attachments list.
 
-`POST /tasks/{id}/attachments` 🔒 — caller must be `OWNER` or `SUPERVISOR`. `multipart/form-data`: `file` (required,
-pdf/jpg/jpeg/png/doc/docx, max 10MB), `category` (optional free text, e.g. "Blueprint", "Reference").
+`POST /tasks/{id}/attachments` 🔒 — caller must be `OWNER` or `SUPERVISOR`. `multipart/form-data`, send either:
+- `file`: one file, or
+- `files[]`: up to 10 files.
 
-**Response `201`** — `{ "message": "Attachment uploaded successfully.", "data": { id, file_name, category, file_size, url } }`
+Allowed types: pdf/jpg/jpeg/png/doc/docx, max 10MB each. Optional `category` (free text, e.g. "Blueprint", "Reference").
 
-`DELETE /tasks/{id}/attachments/{attachmentId}` 🔒 — removes the file and its record.
+**Response `201`**:
+- With `file`: `{ "message": "Attachment uploaded successfully.", "data": { id, file_name, category, file_size, url } }`
+- With `files[]`: same, but `data` is an array of those objects.
+
+**Response `422`** — no file, wrong type, or too big. A file larger than the server's PHP `upload_max_filesize` never
+reaches the API, and the message says so, with the limit. On the server, raise `upload_max_filesize` and
+`post_max_size` to at least `10M` (`post_max_size` must cover all files in one request).
+
+`DELETE /tasks/{id}/attachments/{attachmentId}` 🔒 — `OWNER` or `SUPERVISOR` only. Removes the file and its record.
 
 ---
 
